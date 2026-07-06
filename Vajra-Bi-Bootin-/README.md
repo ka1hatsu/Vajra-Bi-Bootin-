@@ -34,3 +34,24 @@ pytest
 ```
 
 > The distro catalog is starter data for the prototype. Hardware requirements and boot support should be verified against official distro documentation before release.
+
+
+## Phase 2 GUI
+
+Install dependencies and launch:
+
+```bash
+pip install -r requirements.txt
+python main.py
+```
+
+The desktop GUI provides:
+- welcome screen;
+- background hardware scan;
+- hardware summary cards;
+- usage and experience preferences;
+- ranked Linux recommendations;
+- recommendation reasons;
+- buttons that open official distro download pages.
+
+The recommendation engine remains deterministic. The current GUI does not write USB drives yet.
