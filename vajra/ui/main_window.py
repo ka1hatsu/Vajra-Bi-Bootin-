@@ -10,6 +10,8 @@ from vajra.hardware.scanner import scan_hardware
 from vajra.catalog.loader import load_distros
 from vajra.recommender.engine import recommend_distros
 from vajra.ui.download_dialog import DownloadDialog
+from vajra.ui.distro_browser import DistroBrowser
+from vajra.ui.usb_dialog import UsbDeviceDialog
 
 
 class ScanWorker(QThread):
@@ -97,6 +99,20 @@ class MainWindow(QMainWindow):
         row.addWidget(start)
         row.addStretch()
         layout.addLayout(row)
+
+        choice_row = QHBoxLayout()
+        manual = QPushButton("Choose Linux Myself")
+        manual.clicked.connect(self.open_distro_browser)
+        existing = QPushButton("Download / Existing ISO Path")
+        existing.clicked.connect(self.open_download_center)
+        choice_row.addStretch()
+        usb_check = QPushButton("Check USB Devices")
+        usb_check.clicked.connect(self.open_usb_devices)
+        choice_row.addWidget(manual)
+        choice_row.addWidget(existing)
+        choice_row.addWidget(usb_check)
+        choice_row.addStretch()
+        layout.addLayout(choice_row)
         layout.addStretch()
         return page
 
@@ -206,6 +222,12 @@ class MainWindow(QMainWindow):
             box.addWidget(key)
             box.addWidget(val)
             self.hardware_grid.addWidget(card, index // 4, index % 4)
+
+    def open_usb_devices(self):
+        UsbDeviceDialog(parent=self).exec()
+
+    def open_distro_browser(self):
+        DistroBrowser(parent=self).exec()
 
     def open_download_center(self):
         DownloadDialog(parent=self).exec()

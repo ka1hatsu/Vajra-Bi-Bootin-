@@ -56,3 +56,26 @@ The desktop GUI provides:
 
 The recommendation engine remains deterministic. The current GUI does not write USB drives yet.
 \n\n## Phase 3\nAdds streamed image downloads, progress, cancellation, `.part` cleanup, SHA-256 verification, a GUI Download Center, and checksum tests.\n
+
+## Phase 3.1: Optional AI path and manual distro choice
+
+The home workflow now supports:
+- Smart Recommendation: scan hardware and rank compatible distros.
+- Choose Linux Myself: search and browse the distro catalog without AI.
+- Download Center: use a valid direct ISO/image URL and optionally verify SHA-256.
+
+The manual path never requires accepting an AI recommendation. Hard compatibility checks should warn about genuine architecture incompatibility, but ordinary preference choices remain with the user.
+
+This merge package intentionally omits `vajra/hardware/scanner.py` so a locally improved scanner is not overwritten.
+
+
+## Phase 4: USB detection and safety layer
+
+Phase 4 adds Linux block-device discovery using `lsblk`, removable/USB eligibility checks,
+root/system-disk blocking, read-only-device blocking, model/capacity/transport/mountpoint display,
+refresh support, and a GUI safety-check dialog.
+
+**Phase 4 is detection-only. It does not write, erase, format, mount, or unmount drives.**
+Actual image writing belongs to a later phase after additional safeguards and testing.
+
+The merge package continues to omit `vajra/hardware/scanner.py`, preserving the user's improved scanner.
