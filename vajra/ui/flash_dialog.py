@@ -4,6 +4,8 @@ from PySide6.QtWidgets import QDialog,QVBoxLayout,QHBoxLayout,QLabel,QLineEdit,Q
 from vajra.writer.devices import eligible_usb_devices,format_size,DeviceDetectionError
 from vajra.writer.flash import write_image,FlashCancelled
 from vajra.writer.verify import verify_written_image
+from vajra.writer.preflight import revalidate_target, ensure_image_fits, PreflightError
+from vajra.writer.session import TargetIdentity
 
 class FlashWorker(QThread):
     progress=Signal(int); stage=Signal(str); completed=Signal(); failed=Signal(str)
@@ -48,10 +50,39 @@ class FlashDialog(QDialog):
         if not self.devices: QMessageBox.warning(self,"No USB","No eligible USB device is selected."); return
         if self.confirm.text().strip()!="ERASE": QMessageBox.warning(self,"Confirmation required","Type ERASE exactly."); return
         d=self.devices[self.combo.currentIndex()]
-        if Path(p).stat().st_size>d["size_bytes"]: QMessageBox.critical(self,"Image too large","The image is larger than the USB device."); return
+
+        # Phase 6: freeze the identity of the device selected by the user.
+        target_identity = TargetIdentity.from_device(d)
+
+        try:
+            ensure_image_fits(p, d)
+        except PreflightError as e:
+            QMessageBox.critical(self, "Preflight failed", str(e))
+            return
         ans=QMessageBox.warning(self,"Final confirmation",f'ALL DATA WILL BE ERASED on:\n\nPath: {d["path"]}\nModel: {d["vendor"]} {d["model"]}\nSize: {format_size(d["size_bytes"])}\n\nImage: {p}',QMessageBox.Yes|QMessageBox.No,QMessageBox.No)
-        if ans!=QMessageBox.Yes:return
-        self.worker=FlashWorker(p,d["path"]); self.worker.progress.connect(self.progress.setValue); self.worker.stage.connect(self.stage.setText); self.worker.completed.connect(self.flash_complete); self.worker.failed.connect(self.failed)
+        if ans != QMessageBox.Yes:
+            return
+
+        # Phase 6: rediscover and verify the target immediately before writing.
+        try:
+            validated_device = revalidate_target(
+                target_identity.path,
+                expected_serial=target_identity.serial,
+                expected_size=target_identity.size_bytes,
+            )
+            ensure_image_fits(p, validated_device)
+
+        except PreflightError as e:
+            QMessageBox.critical(
+                self,
+                "Safety check failed",
+                "Writing was blocked because the target device changed "
+                "or no longer passes safety checks.\n\n" + str(e),
+            )
+            self.refresh()
+            return
+
+        self.worker=FlashWorker(p,validated_device["path"]); self.worker.progress.connect(self.progress.setValue); self.worker.stage.connect(self.stage.setText); self.worker.completed.connect(self.flash_complete); self.worker.failed.connect(self.failed)
         self.write.setEnabled(False); self.cancel.setEnabled(True); self.worker.start()
     def stop(self):
         if hasattr(self,"worker"):self.worker.cancel(); self.stage.setText("Cancellation requested...")
