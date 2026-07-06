@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QDialog,QVBoxLayout,QLabel,QComboBox,QProgressBar,
 from vajra.ui.release_resolver_worker import ReleaseResolverWorker
 from vajra.sources.registry import get_official_fallback
 from vajra.downloader.worker import DownloadWorker
+from vajra.verification.policy import evaluate_download_verification
 
 class ResolvedDownloadDialog(QDialog):
     image_ready=Signal(str)
@@ -77,8 +78,33 @@ class ResolvedDownloadDialog(QDialog):
         self.status.setText(f"{done}/{total or '?'} bytes, {speed/1024/1024:.2f} MiB/s{eta_text}")
 
     def on_complete(self,path,digest):
-        self.progress.setRange(0,100); self.progress.setValue(100)
-        self.status.setText(f"Verified ISO ready: {path}"); self.image_ready.emit(path); self.accept()
+        self.progress.setRange(0,100)
+        self.progress.setValue(100)
+
+        image = self.selected_image()
+        expected = image.sha256 if image else ""
+        decision = evaluate_download_verification(expected, digest)
+
+        if not decision.can_flash:
+            self.status.setText(
+                f"Verification state: {decision.state}\n{decision.message}\n\n"
+                f"Downloaded file: {path}\n"
+                f"Calculated SHA-256: {digest}"
+            )
+            self.download.setEnabled(False)
+            self.cancel.setText("Close")
+            QMessageBox.critical(self, "Image verification blocked", decision.message)
+            return
+
+        self.status.setText(
+            f"Verification state: verified\n"
+            f"{decision.message}\n\n"
+            f"Image: {path}\n"
+            f"SHA-256: {digest}"
+        )
+        self.cancel.setText("Close")
+        self.image_ready.emit(path)
+        self.accept()
 
     def on_failed(self,message):
         self.download.setEnabled(True); self.cancel.setText("Cancel")
