@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 from vajra.hardware.scanner import scan_hardware
 from vajra.catalog.loader import load_distros
 from vajra.recommender.engine import recommend_distros
+from vajra.ui.download_dialog import DownloadDialog
 
 
 class ScanWorker(QThread):
@@ -170,6 +171,9 @@ class MainWindow(QMainWindow):
         recommend.setObjectName("primary")
         recommend.clicked.connect(self.show_recommendations)
         button_row.addWidget(rescan)
+        downloads = QPushButton("Download Center")
+        downloads.clicked.connect(self.open_download_center)
+        button_row.addWidget(downloads)
         button_row.addStretch()
         button_row.addWidget(recommend)
         layout.addLayout(button_row)
@@ -202,6 +206,9 @@ class MainWindow(QMainWindow):
             box.addWidget(key)
             box.addWidget(val)
             self.hardware_grid.addWidget(card, index // 4, index % 4)
+
+    def open_download_center(self):
+        DownloadDialog(parent=self).exec()
 
     def show_recommendations(self):
         preferences = {

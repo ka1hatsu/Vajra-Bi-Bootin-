@@ -55,3 +55,4 @@ The desktop GUI provides:
 - buttons that open official distro download pages.
 
 The recommendation engine remains deterministic. The current GUI does not write USB drives yet.
+\n\n## Phase 3\nAdds streamed image downloads, progress, cancellation, `.part` cleanup, SHA-256 verification, a GUI Download Center, and checksum tests.\n
