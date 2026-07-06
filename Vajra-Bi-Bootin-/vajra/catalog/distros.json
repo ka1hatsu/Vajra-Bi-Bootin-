@@ -1,0 +1,147 @@
+[
+  {
+    "id": "lubuntu",
+    "name": "Lubuntu",
+    "minimum_ram_gb": 1,
+    "recommended_ram_gb": 4,
+    "minimum_cores": 1,
+    "architectures": [
+      "x86_64",
+      "amd64"
+    ],
+    "desktop": "LXQt",
+    "difficulty": "beginner",
+    "categories": [
+      "old_pc",
+      "daily_use",
+      "coding"
+    ],
+    "official_download_page": "https://lubuntu.me/downloads/",
+    "supports_uefi": true,
+    "supports_legacy_bios": true
+  },
+  {
+    "id": "linux-mint-xfce",
+    "name": "Linux Mint Xfce",
+    "minimum_ram_gb": 2,
+    "recommended_ram_gb": 4,
+    "minimum_cores": 2,
+    "architectures": [
+      "x86_64",
+      "amd64"
+    ],
+    "desktop": "Xfce",
+    "difficulty": "beginner",
+    "categories": [
+      "daily_use",
+      "coding",
+      "beginner"
+    ],
+    "official_download_page": "https://www.linuxmint.com/download.php",
+    "supports_uefi": true,
+    "supports_legacy_bios": true
+  },
+  {
+    "id": "mx-linux-xfce",
+    "name": "MX Linux Xfce",
+    "minimum_ram_gb": 2,
+    "recommended_ram_gb": 4,
+    "minimum_cores": 1,
+    "architectures": [
+      "x86_64",
+      "amd64"
+    ],
+    "desktop": "Xfce",
+    "difficulty": "beginner",
+    "categories": [
+      "old_pc",
+      "daily_use"
+    ],
+    "official_download_page": "https://mxlinux.org/download-links/",
+    "supports_uefi": true,
+    "supports_legacy_bios": true
+  },
+  {
+    "id": "xubuntu",
+    "name": "Xubuntu",
+    "minimum_ram_gb": 2,
+    "recommended_ram_gb": 4,
+    "minimum_cores": 2,
+    "architectures": [
+      "x86_64",
+      "amd64"
+    ],
+    "desktop": "Xfce",
+    "difficulty": "beginner",
+    "categories": [
+      "daily_use",
+      "coding"
+    ],
+    "official_download_page": "https://xubuntu.org/download/",
+    "supports_uefi": true,
+    "supports_legacy_bios": true
+  },
+  {
+    "id": "fedora-workstation",
+    "name": "Fedora Workstation",
+    "minimum_ram_gb": 4,
+    "recommended_ram_gb": 8,
+    "minimum_cores": 2,
+    "architectures": [
+      "x86_64",
+      "amd64"
+    ],
+    "desktop": "GNOME",
+    "difficulty": "intermediate",
+    "categories": [
+      "coding",
+      "daily_use",
+      "modern_pc"
+    ],
+    "official_download_page": "https://fedoraproject.org/workstation/download",
+    "supports_uefi": true,
+    "supports_legacy_bios": true
+  },
+  {
+    "id": "ubuntu",
+    "name": "Ubuntu Desktop",
+    "minimum_ram_gb": 4,
+    "recommended_ram_gb": 8,
+    "minimum_cores": 2,
+    "architectures": [
+      "x86_64",
+      "amd64"
+    ],
+    "desktop": "GNOME",
+    "difficulty": "beginner",
+    "categories": [
+      "daily_use",
+      "coding",
+      "beginner"
+    ],
+    "official_download_page": "https://ubuntu.com/download/desktop",
+    "supports_uefi": true,
+    "supports_legacy_bios": true
+  },
+  {
+    "id": "debian-xfce",
+    "name": "Debian Xfce",
+    "minimum_ram_gb": 2,
+    "recommended_ram_gb": 4,
+    "minimum_cores": 1,
+    "architectures": [
+      "x86_64",
+      "amd64"
+    ],
+    "desktop": "Xfce",
+    "difficulty": "intermediate",
+    "categories": [
+      "old_pc",
+      "coding",
+      "stable"
+    ],
+    "official_download_page": "https://www.debian.org/distrib/",
+    "supports_uefi": true,
+    "supports_legacy_bios": true
+  }
+]
