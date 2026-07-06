@@ -58,6 +58,51 @@ def _detect_secure_boot():
             return "Disabled"
     return "Unknown"
 
+def _detect_cpu():
+    system = platform.system()
+
+    if system == "Linux":
+        # First try /proc/cpuinfo
+        try:
+            with open("/proc/cpuinfo", "r", encoding="utf-8") as file:
+                for line in file:
+                    if line.lower().startswith("model name"):
+                        return line.split(":", 1)[1].strip()
+        except Exception:
+            pass
+
+        # Fallback to lscpu
+        output = _run([
+            "sh", "-c",
+            "lscpu | grep 'Model name' | head -1 | cut -d: -f2-"
+        ])
+
+        if output:
+            return output.strip()
+
+    elif system == "Windows":
+        output = _run([
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            "Get-CimInstance Win32_Processor | "
+            "Select-Object -First 1 -ExpandProperty Name"
+        ])
+
+        if output:
+            return output.strip()
+
+    elif system == "Darwin":
+        output = _run([
+            "sysctl",
+            "-n",
+            "machdep.cpu.brand_string"
+        ])
+
+        if output:
+            return output.strip()
+
+    return platform.processor() or platform.machine() or "Unknown"
 
 def scan_hardware():
     memory = psutil.virtual_memory()
@@ -67,7 +112,7 @@ def scan_hardware():
         "os": platform.system(),
         "os_version": platform.release(),
         "architecture": platform.machine().lower(),
-        "cpu": platform.processor() or "Unknown",
+        "cpu": _detect_cpu(),
         "physical_cores": psutil.cpu_count(logical=False) or 1,
         "logical_cores": psutil.cpu_count(logical=True) or 1,
         "ram_gb": round(memory.total / (1024 ** 3), 1),
