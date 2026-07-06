@@ -13,7 +13,7 @@ class ResolvedDownloadDialog(QDialog):
     def __init__(self,distro_id,architecture,parent=None):
         super().__init__(parent)
         self.distro_id=distro_id; self.architecture=architecture
-        self.images=[]; self.resolver=None; self.worker=None
+        self.images=[]; self.resolver=None; self.worker=None; self.workflow_state="resolving"
         self.setWindowTitle("Resolve Compatible ISO"); self.resize(650,320)
         layout=QVBoxLayout(self)
         self.status=QLabel(f"Resolving compatible releases for {architecture}...")
@@ -61,7 +61,40 @@ class ResolvedDownloadDialog(QDialog):
         i=self.combo.currentIndex()
         return self.images[i] if 0<=i<len(self.images) else None
 
+    def set_workflow_state(self,state,message):
+        self.workflow_state=state
+        self.status.setText(message)
+
+        busy=state in ("resolving","downloading","verifying","cancelling")
+        self.combo.setEnabled(bool(self.images) and not busy)
+
+        if state=="ready":
+            self.download.setText("Download ISO")
+            self.download.setEnabled(bool(self.images))
+            self.cancel.setText("Close")
+        elif state=="downloading":
+            self.download.setText("Downloading...")
+            self.download.setEnabled(False)
+            self.cancel.setText("Cancel Download")
+        elif state=="verifying":
+            self.download.setText("Verifying...")
+            self.download.setEnabled(False)
+            self.cancel.setText("Cancel")
+        elif state=="verified":
+            self.download.setText("Verified")
+            self.download.setEnabled(False)
+            self.cancel.setText("Close")
+        elif state in ("failed","cancelled"):
+            self.download.setText("Retry Download")
+            self.download.setEnabled(bool(self.images))
+            self.cancel.setText("Close")
+        elif state=="cancelling":
+            self.download.setEnabled(False)
+            self.cancel.setEnabled(False)
+
     def start_download(self):
+        if self.worker and self.worker.isRunning():
+            return
         image=self.selected_image()
         if not image:return
         destination,_=QFileDialog.getSaveFileName(self,"Save ISO",str(Path.home()/"Downloads"/image.filename),"ISO images (*.iso);;All files (*)")
@@ -69,7 +102,8 @@ class ResolvedDownloadDialog(QDialog):
         self.worker=DownloadWorker(image.image_url,destination,image.sha256 or None,self)
         self.worker.progress.connect(self.on_progress); self.worker.completed.connect(self.on_complete)
         self.worker.failed.connect(self.on_failed); self.worker.cancelled_signal.connect(self.on_cancelled)
-        self.download.setEnabled(False); self.cancel.setText("Cancel Download"); self.worker.start()
+        self.set_workflow_state("downloading","Downloading ISO...")
+        self.worker.start()
 
     def on_progress(self,done,total,speed,eta):
         if total:self.progress.setRange(0,100); self.progress.setValue(int(done*100/total))
@@ -78,6 +112,7 @@ class ResolvedDownloadDialog(QDialog):
         self.status.setText(f"{done}/{total or '?'} bytes, {speed/1024/1024:.2f} MiB/s{eta_text}")
 
     def on_complete(self,path,digest):
+        self.set_workflow_state("verifying","Download complete. Verifying SHA-256...")
         self.progress.setRange(0,100)
         self.progress.setValue(100)
 
@@ -102,20 +137,19 @@ class ResolvedDownloadDialog(QDialog):
             f"Image: {path}\n"
             f"SHA-256: {digest}"
         )
-        self.cancel.setText("Close")
+        self.set_workflow_state("verified", self.status.text())
         self.image_ready.emit(path)
         self.accept()
 
     def on_failed(self,message):
-        self.download.setEnabled(True); self.cancel.setText("Cancel")
-        self.status.setText("Download failed; .part file kept for resume.")
+        self.set_workflow_state("failed","Download failed; .part file kept for resume. Retry will resume when supported.")
         QMessageBox.critical(self,"Download failed",message)
 
     def on_cancelled(self):
-        self.download.setEnabled(True); self.cancel.setText("Cancel")
-        self.status.setText("Cancelled; .part file kept for resume.")
+        self.set_workflow_state("cancelled","Cancelled; .part file kept for resume. You can retry.")
 
     def cancel_or_close(self):
         if self.worker and self.worker.isRunning():
-            self.worker.cancel(); self.status.setText("Cancelling...")
+            self.set_workflow_state("cancelling","Cancelling download safely...")
+            self.worker.cancel()
         else:self.reject()
