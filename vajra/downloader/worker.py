@@ -2,10 +2,13 @@ from PySide6.QtCore import QThread,Signal
 from vajra.downloader.manager import download_file,DownloadCancelled
 
 class DownloadWorker(QThread):
-    progress=Signal(int,int,float,float); completed=Signal(str,str); failed=Signal(str); cancelled_signal=Signal()
+    progress=Signal(object,object,float,float); completed=Signal(str,str); failed=Signal(str); cancelled_signal=Signal()
     def __init__(self,url,destination,sha256=None,parent=None):
         super().__init__(parent); self.url=url; self.destination=destination; self.sha256=sha256; self._cancel=False
     def cancel(self): self._cancel=True
+    def request_stop(self):
+        self.cancel()
+
     def run(self):
         try:
             r=download_file(self.url,self.destination,self.sha256 or None,

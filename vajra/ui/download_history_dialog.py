@@ -5,10 +5,12 @@ from PySide6.QtWidgets import (
     QScrollArea, QWidget, QFrame, QMessageBox
 )
 from vajra.downloads.history import DownloadHistory
+from vajra.downloads.library import inspect_record
 
 
 class DownloadHistoryDialog(QDialog):
     flash_requested = Signal(str)
+    resume_requested = Signal(str, str, str)
 
     def __init__(self,parent=None):
         super().__init__(parent)
@@ -63,11 +65,17 @@ class DownloadHistoryDialog(QDialog):
             row.addWidget(details)
 
             actions=QHBoxLayout()
+            recheck=QPushButton("Recheck ISO")
+            recheck.clicked.connect(lambda checked=False,r=record:self.recheck_record(r))
+            remove=QPushButton("Remove Entry")
+            remove.clicked.connect(lambda checked=False,r=record:self.remove_record(r))
+            actions.addWidget(recheck)
+            actions.addWidget(remove)
             if record.resumable:
                 resume=QPushButton("Resume")
                 resume.setToolTip("Resume is available from the distro download flow.")
                 resume.clicked.connect(
-                    lambda checked=False, r=record: self.show_resume_info(r)
+                    lambda checked=False, r=record: self.request_resume(r)
                 )
                 actions.addWidget(resume)
 
@@ -84,6 +92,22 @@ class DownloadHistoryDialog(QDialog):
 
         box.addStretch()
         self.scroll.setWidget(content)
+
+    def request_resume(self,record):
+        self.resume_requested.emit(record.distro_id,record.architecture,record.path)
+        self.accept()
+
+    def recheck_record(self,record):
+        state,digest=inspect_record(record)
+        record.state=state
+        if digest: record.actual_sha256=digest
+        self.history.upsert(record)
+        QMessageBox.information(self,"ISO check complete",f"State: {state}")
+        self.refresh()
+
+    def remove_record(self,record):
+        self.history.remove(record.distro_id,record.path)
+        self.refresh()
 
     def show_resume_info(self,record):
         QMessageBox.information(

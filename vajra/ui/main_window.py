@@ -255,6 +255,12 @@ class MainWindow(QMainWindow):
         dialog.flash_requested.connect(
             self.open_verified_history_image
         )
+        dialog.resume_requested.connect(self.resume_history_download)
+        dialog.exec()
+
+    def resume_history_download(self,distro_id,architecture,path):
+        dialog=ResolvedDownloadDialog(distro_id,architecture,parent=self,resume_destination=path)
+        dialog.image_ready.connect(self.open_verified_history_image)
         dialog.exec()
 
     def open_verified_history_image(self, path):

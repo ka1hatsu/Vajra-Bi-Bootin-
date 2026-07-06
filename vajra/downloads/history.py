@@ -76,5 +76,14 @@ class DownloadHistory:
     def recent(self,limit=20):
         return self.load()[:limit]
 
+    def remove(self,distro_id,path):
+        records=[x for x in self.load() if not (x.distro_id==distro_id and x.path==str(path))]
+        self.save(records)
+
+    def get(self,distro_id,path):
+        for record in self.load():
+            if record.distro_id==distro_id and record.path==str(path): return record
+        return None
+
     def verified_existing(self):
         return [x for x in self.load() if x.verified and Path(x.path).is_file()]

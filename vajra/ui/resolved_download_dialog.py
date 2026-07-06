@@ -11,9 +11,10 @@ from vajra.downloads.session import DownloadSession
 class ResolvedDownloadDialog(QDialog):
     image_ready=Signal(str)
 
-    def __init__(self,distro_id,architecture,parent=None):
+    def __init__(self,distro_id,architecture,parent=None,resume_destination=None):
         super().__init__(parent)
         self.distro_id=distro_id; self.architecture=architecture
+        self.resume_destination=resume_destination
         self.images=[]; self.resolver=None; self.worker=None; self.workflow_state="resolving"; self.download_session=None
         self.setWindowTitle("Resolve Compatible ISO"); self.resize(650,320)
         layout=QVBoxLayout(self)
@@ -98,8 +99,12 @@ class ResolvedDownloadDialog(QDialog):
             return
         image=self.selected_image()
         if not image:return
-        destination,_=QFileDialog.getSaveFileName(self,"Save ISO",str(Path.home()/"Downloads"/image.filename),"ISO images (*.iso);;All files (*)")
-        if not destination:return
+        if self.resume_destination:
+            destination=self.resume_destination
+            self.resume_destination=None
+        else:
+            destination,_=QFileDialog.getSaveFileName(self,"Save ISO",str(Path.home()/"Downloads"/image.filename),"ISO images (*.iso);;All files (*)")
+            if not destination:return
         self.download_session=DownloadSession(self.distro_id,image,destination)
         self.worker=DownloadWorker(image.image_url,destination,image.sha256 or None,self)
         self.worker.progress.connect(self.on_progress); self.worker.completed.connect(self.on_complete)
@@ -157,6 +162,15 @@ class ResolvedDownloadDialog(QDialog):
         if self.download_session:
             self.download_session.cancelled()
         self.set_workflow_state("cancelled","Cancelled; .part file kept for resume. You can retry.")
+
+    def closeEvent(self,event):
+        if self.worker and self.worker.isRunning():
+            self.worker.cancel()
+            if not self.worker.wait(5000):
+                event.ignore()
+                self.set_workflow_state("cancelling","Waiting for the active download to stop safely...")
+                return
+        event.accept()
 
     def cancel_or_close(self):
         if self.worker and self.worker.isRunning():
