@@ -79,3 +79,30 @@ refresh support, and a GUI safety-check dialog.
 Actual image writing belongs to a later phase after additional safeguards and testing.
 
 The merge package continues to omit `vajra/hardware/scanner.py`, preserving the user's improved scanner.
+\n\n## Phase 5\nAdds guarded ISO/IMG writing, image/device size checks, explicit ERASE confirmation, final device identity confirmation, progress, cancellation requests, fsync, and post-write byte-range SHA-256 verification. Raw device access may require privileges; production packaging should use a narrowly scoped privileged helper rather than running the full GUI as root.\n
+## Phase 5: USB image writing and post-write verification
+
+Phase 5 adds the guarded USB image-writing pipeline:
+
+- ISO and IMG file selection.
+- Eligible removable USB device selection.
+- Image-size and target-capacity validation.
+- Mandatory `ERASE` confirmation before writing.
+- Final destructive-action confirmation showing the exact device path, model, capacity, and selected image.
+- Chunked raw image writing with progress reporting.
+- Cooperative cancellation support during writing and verification.
+- `fsync` before reporting write completion.
+- Post-write SHA-256 verification of the written image data.
+- Protection inherited from Phase 4 against system disks, read-only devices, and ineligible storage devices.
+
+> **Warning:** Writing an image destroys existing data on the selected target device. Vajra performs multiple checks and confirmations, but users should still verify the exact target device before approving the operation.
+
+### Phase 5 fixes
+
+The following fixes were added after the initial Phase 5 implementation:
+
+- Fixed cancellation during the verification stage.
+- Improved cancellation responsiveness.
+- Fixed the `QDialog.done()` method-name collision in the PySide6 flash dialog.
+- Added a Back button from the Hardware Detected page to the Welcome page.
+
