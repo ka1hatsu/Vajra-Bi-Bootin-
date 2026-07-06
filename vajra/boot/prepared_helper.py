@@ -1,4 +1,7 @@
 import os, re, subprocess, tempfile
+from vajra.boot.iso_inspector import inspect_iso
+from vajra.boot.large_file_policy import choose_strategy, LargeFilePolicyError
+from vajra.boot.windows_media import split_install_wim, WindowsMediaError
 
 class PreparedMediaError(RuntimeError):
     pass
@@ -34,7 +37,53 @@ def prepare_fat32_media(image, device, plan, progress=None):
         run(["mount", part, mount_dir])
         try:
             if progress: progress(40, "Extracting ISO contents...")
-            run(["7z", "x", "-y", f"-o{mount_dir}", image])
+            info = inspect_iso(image)
+
+            try:
+                strategy = choose_strategy(info, "FAT32")
+            except LargeFilePolicyError as e:
+                raise PreparedMediaError(str(e))
+
+            if strategy == "split_windows_wim":
+                with tempfile.TemporaryDirectory(
+                    prefix="vajra-extract-"
+                ) as extract_dir:
+
+                    run([
+                        "7z",
+                        "x",
+                        "-y",
+                        f"-o{extract_dir}",
+                        image,
+                    ])
+
+                    if progress:
+                        progress(
+                            70,
+                            "Splitting Windows install.wim for FAT32..."
+                        )
+
+                    try:
+                        split_install_wim(extract_dir)
+                    except WindowsMediaError as e:
+                        raise PreparedMediaError(str(e))
+
+                    run([
+                        "cp",
+                        "-a",
+                        f"{extract_dir}/.",
+                        mount_dir,
+                    ])
+
+            else:
+                run([
+                    "7z",
+                    "x",
+                    "-y",
+                    f"-o{mount_dir}",
+                    image,
+                ])
+
             run(["sync"])
         finally:
             subprocess.run(["umount", mount_dir], capture_output=True, text=True)
