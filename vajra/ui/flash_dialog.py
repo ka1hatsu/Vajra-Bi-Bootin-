@@ -1,6 +1,6 @@
 from pathlib import Path
 from PySide6.QtCore import QThread,Signal
-from PySide6.QtWidgets import QDialog,QVBoxLayout,QHBoxLayout,QLabel,QLineEdit,QPushButton,QFileDialog,QComboBox,QProgressBar,QMessageBox
+from PySide6.QtWidgets import QDialog,QVBoxLayout,QHBoxLayout,QLabel,QLineEdit,QPushButton,QFileDialog,QComboBox,QProgressBar,QMessageBox,QFormLayout
 from vajra.writer.devices import eligible_usb_devices,format_size,DeviceDetectionError
 from vajra.writer.flash import write_image,FlashCancelled
 from vajra.writer.verify import verify_written_image
@@ -8,6 +8,8 @@ from vajra.writer.preflight import revalidate_target, ensure_image_fits, Preflig
 from vajra.writer.session import TargetIdentity
 from vajra.writer.helper_client import HelperClient
 from vajra.writer.privilege import PrivilegeError
+from vajra.boot.analyzer import analyze_image
+from vajra.boot.config import BootConfig, PARTITION_SCHEMES, TARGET_SYSTEMS, FILE_SYSTEMS, IMAGE_OPTIONS
 
 class FlashWorker(QThread):
     progress=Signal(int); stage=Signal(str); completed=Signal(); failed=Signal(str)
@@ -33,13 +35,30 @@ class FlashDialog(QDialog):
         self.image=QLineEdit(); self.image.setPlaceholderText("Choose an .iso or .img file"); choose=QPushButton("Choose Image"); choose.clicked.connect(self.choose_image)
         r=QHBoxLayout(); r.addWidget(self.image); r.addWidget(choose); l.addLayout(r)
         self.combo=QComboBox(); l.addWidget(self.combo); refresh=QPushButton("Refresh Eligible USB Devices"); refresh.clicked.connect(self.refresh); l.addWidget(refresh)
+        form=QFormLayout()
+        self.image_option=QComboBox(); self.image_option.addItems(IMAGE_OPTIONS); form.addRow("Image option",self.image_option)
+        self.partition_scheme=QComboBox(); self.partition_scheme.addItems(PARTITION_SCHEMES); form.addRow("Partition scheme",self.partition_scheme)
+        self.target_system=QComboBox(); self.target_system.addItems(TARGET_SYSTEMS); form.addRow("Target system",self.target_system)
+        self.file_system=QComboBox(); self.file_system.addItems(FILE_SYSTEMS); form.addRow("File system",self.file_system)
+        self.volume_label=QLineEdit(); self.volume_label.setPlaceholderText("Optional volume label"); form.addRow("Volume label",self.volume_label)
+        l.addLayout(form)
+        self.analysis_label=QLabel("Choose an image to analyze boot compatibility."); self.analysis_label.setWordWrap(True); l.addWidget(self.analysis_label)
         self.confirm=QLineEdit(); self.confirm.setPlaceholderText("Type ERASE to enable writing"); l.addWidget(self.confirm)
         self.stage=QLabel("Ready"); l.addWidget(self.stage); self.progress=QProgressBar(); l.addWidget(self.progress)
         r=QHBoxLayout(); self.write=QPushButton("Write and Verify"); self.cancel=QPushButton("Cancel"); self.cancel.setEnabled(False)
         self.write.clicked.connect(self.start); self.cancel.clicked.connect(self.stop); r.addWidget(self.write); r.addWidget(self.cancel); l.addLayout(r); self.refresh()
     def choose_image(self):
         p,_=QFileDialog.getOpenFileName(self,"Choose Disk Image",str(Path.home()),"Disk Images (*.iso *.img);;All Files (*)")
-        if p:self.image.setText(p)
+        if p:
+            self.image.setText(p)
+            try:
+                a=analyze_image(p)
+                hints=[]
+                if a.uefi_hint: hints.append("UEFI hint")
+                if a.bios_hint: hints.append("BIOS/bootable hint")
+                self.analysis_label.setText(f"{a.image_type} • {', '.join(hints) if hints else 'no boot-mode hint detected'}. {a.note}")
+            except Exception as e:
+                self.analysis_label.setText(f"Analysis unavailable: {e}")
     def refresh(self):
         self.combo.clear()
         try:self.devices=eligible_usb_devices()
@@ -48,6 +67,10 @@ class FlashDialog(QDialog):
         if not self.devices:self.combo.addItem("No eligible removable USB device detected")
     def start(self):
         p=self.image.text().strip()
+        config=BootConfig(self.partition_scheme.currentText(),self.target_system.currentText(),self.file_system.currentText(),self.image_option.currentText(),self.volume_label.text().strip())
+        try: config.validate()
+        except ValueError as e:
+            QMessageBox.warning(self,"Unsupported configuration",str(e)); return
         if not Path(p).is_file(): QMessageBox.warning(self,"Invalid image","Choose an existing ISO or IMG file."); return
         if not self.devices: QMessageBox.warning(self,"No USB","No eligible USB device is selected."); return
         if self.confirm.text().strip()!="ERASE": QMessageBox.warning(self,"Confirmation required","Type ERASE exactly."); return
