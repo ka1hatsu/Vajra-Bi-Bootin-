@@ -11,6 +11,8 @@ from vajra.writer.privilege import PrivilegeError
 from vajra.boot.analyzer import analyze_image
 from vajra.boot.compatibility import evaluate
 from vajra.boot.config import BootConfig, PARTITION_SCHEMES, TARGET_SYSTEMS, FILE_SYSTEMS, IMAGE_OPTIONS
+from vajra.boot.planner import build_plan, PreparationPlanError
+from vajra.boot.backend import check_backend_available, BackendUnavailable
 
 class FlashWorker(QThread):
     progress=Signal(int); stage=Signal(str); completed=Signal(); failed=Signal(str)
@@ -109,9 +111,35 @@ class FlashDialog(QDialog):
                 return
 
         config=BootConfig(self.partition_scheme.currentText(),self.target_system.currentText(),self.file_system.currentText(),self.image_option.currentText(),self.volume_label.text().strip())
-        try: config.validate()
-        except ValueError as e:
-            QMessageBox.warning(self,"Unsupported configuration",str(e)); return
+        try:
+            config.validate()
+
+            if a:
+                plan = build_plan(config, a)
+                check_backend_available(plan)
+
+        except (
+            ValueError,
+            PreparationPlanError,
+            BackendUnavailable,
+        ) as e:
+            QMessageBox.warning(
+                self,
+                "Unsupported configuration",
+                str(e),
+            )
+            return
+
+        if a and plan.requires_preparation:
+            QMessageBox.information(
+                self,
+                "Prepared-media backend planned",
+                plan.summary
+                + "\n\nPhase 7.3 successfully validated this plan. "
+                "Actual partitioning and ISO extraction will be connected "
+                "to the privileged helper in Phase 7.4.",
+            )
+            return
         if not Path(p).is_file(): QMessageBox.warning(self,"Invalid image","Choose an existing ISO or IMG file."); return
         if not self.devices: QMessageBox.warning(self,"No USB","No eligible USB device is selected."); return
         if self.confirm.text().strip()!="ERASE": QMessageBox.warning(self,"Confirmation required","Type ERASE exactly."); return

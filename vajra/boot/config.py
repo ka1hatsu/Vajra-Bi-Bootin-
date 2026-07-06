@@ -2,7 +2,7 @@ from dataclasses import dataclass
 PARTITION_SCHEMES=("Auto","GPT","MBR")
 TARGET_SYSTEMS=("Auto","UEFI","BIOS / Legacy","UEFI + CSM")
 FILE_SYSTEMS=("Auto","FAT32","NTFS","exFAT")
-IMAGE_OPTIONS=("Auto","Raw image write")
+IMAGE_OPTIONS=("Auto","Raw image write","Extract ISO to prepared USB")
 @dataclass(frozen=True)
 class BootConfig:
     partition_scheme:str="Auto"
