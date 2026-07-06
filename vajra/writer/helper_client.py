@@ -4,10 +4,18 @@ from vajra.writer.privilege import build_privileged_command
 
 class HelperClient(QObject):
     progress=Signal(int); stage=Signal(str); completed=Signal(); failed=Signal(str)
-    def __init__(self,helper_path,image_path,identity,parent=None):
+    def __init__(self,helper_path,image_path,identity,parent=None,plan=None):
         super().__init__(parent); self.buffer=""; self.reported_error=False
         self.process=QProcess(self)
         cmd=build_privileged_command(helper_path,image_path,identity)
+        if plan is not None:
+            cmd.extend([
+                "--mode", plan.mode,
+                "--scheme", plan.partition_scheme,
+                "--target-system", plan.target_system,
+                "--file-system", plan.file_system,
+                "--volume-label", plan.volume_label,
+            ])
         self.program,self.arguments=cmd[0],cmd[1:]
         self.process.readyReadStandardOutput.connect(self.read_stdout)
         self.process.finished.connect(self.finished)

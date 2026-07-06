@@ -131,15 +131,18 @@ class FlashDialog(QDialog):
             return
 
         if a and plan.requires_preparation:
-            QMessageBox.information(
+            answer = QMessageBox.warning(
                 self,
-                "Prepared-media backend planned",
+                "Prepared-media operation",
                 plan.summary
-                + "\n\nPhase 7.3 successfully validated this plan. "
-                "Actual partitioning and ISO extraction will be connected "
-                "to the privileged helper in Phase 7.4.",
+                + "\n\nThis operation will erase and repartition the selected USB. "
+                "The ERASE confirmation and final identity checks still apply.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
             )
-            return
+            if answer != QMessageBox.Yes:
+                return
+
         if not Path(p).is_file(): QMessageBox.warning(self,"Invalid image","Choose an existing ISO or IMG file."); return
         if not self.devices: QMessageBox.warning(self,"No USB","No eligible USB device is selected."); return
         if self.confirm.text().strip()!="ERASE": QMessageBox.warning(self,"Confirmation required","Type ERASE exactly."); return
@@ -178,7 +181,11 @@ class FlashDialog(QDialog):
 
         helper_path = str(Path(__file__).resolve().parents[1] / "writer" / "helper.py")
         try:
-            self.worker = HelperClient(helper_path, p, target_identity, parent=self)
+            self.worker = HelperClient(
+                helper_path, p, target_identity,
+                parent=self,
+                plan=plan if a else None,
+            )
         except PrivilegeError as e:
             QMessageBox.critical(self, "Privilege setup failed", str(e))
             return
