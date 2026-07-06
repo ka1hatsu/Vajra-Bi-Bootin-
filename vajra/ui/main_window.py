@@ -13,9 +13,11 @@ from vajra.ui.download_dialog import DownloadDialog
 from vajra.ui.distro_browser import DistroBrowser
 from vajra.ui.usb_dialog import UsbDeviceDialog
 from vajra.ui.flash_dialog import FlashDialog
+from vajra.ui.download_history_dialog import DownloadHistoryDialog
 from vajra.ui.catalog_download_dialog import CatalogDownloadDialog
 from vajra.workflow.recommendation_download import RecommendationDownloadFlow
 from vajra.ui.resolved_download_dialog import ResolvedDownloadDialog
+from vajra.boot.analyzer import analyze_image
 
 
 class ScanWorker(QThread):
@@ -114,11 +116,14 @@ class MainWindow(QMainWindow):
         manual.clicked.connect(self.open_distro_browser)
         existing = QPushButton("Download / Existing ISO Path")
         existing.clicked.connect(self.open_download_center)
+        history = QPushButton("Download History")
+        history.clicked.connect(self.open_download_history)
         choice_row.addStretch()
         usb_check = QPushButton("Check USB Devices")
         usb_check.clicked.connect(self.open_usb_devices)
         choice_row.addWidget(manual)
         choice_row.addWidget(existing)
+        choice_row.addWidget(history)
         flash_usb = QPushButton("Write Image to USB")
         flash_usb.clicked.connect(self.open_flash_dialog)
         choice_row.addWidget(usb_check)
@@ -244,6 +249,27 @@ class MainWindow(QMainWindow):
 
     def open_flash_dialog(self):
         FlashDialog(parent=self).exec()
+
+    def open_download_history(self):
+        dialog = DownloadHistoryDialog(parent=self)
+        dialog.flash_requested.connect(
+            self.open_verified_history_image
+        )
+        dialog.exec()
+
+    def open_verified_history_image(self, path):
+        dialog = FlashDialog(parent=self)
+
+        dialog.image.setText(path)
+
+        # Re-run image analysis if the current FlashDialog exposes it.
+        try:
+            dialog.current_analysis = analyze_image(path)
+            dialog.update_compatibility()
+        except Exception:
+            pass
+
+        dialog.exec()
 
     def open_usb_devices(self):
         UsbDeviceDialog(parent=self).exec()

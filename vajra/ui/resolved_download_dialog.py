@@ -6,6 +6,7 @@ from vajra.ui.release_resolver_worker import ReleaseResolverWorker
 from vajra.sources.registry import get_official_fallback
 from vajra.downloader.worker import DownloadWorker
 from vajra.verification.policy import evaluate_download_verification
+from vajra.downloads.session import DownloadSession
 
 class ResolvedDownloadDialog(QDialog):
     image_ready=Signal(str)
@@ -13,7 +14,7 @@ class ResolvedDownloadDialog(QDialog):
     def __init__(self,distro_id,architecture,parent=None):
         super().__init__(parent)
         self.distro_id=distro_id; self.architecture=architecture
-        self.images=[]; self.resolver=None; self.worker=None; self.workflow_state="resolving"
+        self.images=[]; self.resolver=None; self.worker=None; self.workflow_state="resolving"; self.download_session=None
         self.setWindowTitle("Resolve Compatible ISO"); self.resize(650,320)
         layout=QVBoxLayout(self)
         self.status=QLabel(f"Resolving compatible releases for {architecture}...")
@@ -99,6 +100,7 @@ class ResolvedDownloadDialog(QDialog):
         if not image:return
         destination,_=QFileDialog.getSaveFileName(self,"Save ISO",str(Path.home()/"Downloads"/image.filename),"ISO images (*.iso);;All files (*)")
         if not destination:return
+        self.download_session=DownloadSession(self.distro_id,image,destination)
         self.worker=DownloadWorker(image.image_url,destination,image.sha256 or None,self)
         self.worker.progress.connect(self.on_progress); self.worker.completed.connect(self.on_complete)
         self.worker.failed.connect(self.on_failed); self.worker.cancelled_signal.connect(self.on_cancelled)
@@ -106,6 +108,8 @@ class ResolvedDownloadDialog(QDialog):
         self.worker.start()
 
     def on_progress(self,done,total,speed,eta):
+        if self.download_session:
+            self.download_session.progress(done,total)
         if total:self.progress.setRange(0,100); self.progress.setValue(int(done*100/total))
         else:self.progress.setRange(0,0)
         eta_text=f", ETA {int(eta)}s" if eta>=0 else ""
@@ -138,14 +142,20 @@ class ResolvedDownloadDialog(QDialog):
             f"SHA-256: {digest}"
         )
         self.set_workflow_state("verified", self.status.text())
+        if self.download_session:
+            self.download_session.completed(path,digest,True)
         self.image_ready.emit(path)
         self.accept()
 
     def on_failed(self,message):
+        if self.download_session:
+            self.download_session.failed()
         self.set_workflow_state("failed","Download failed; .part file kept for resume. Retry will resume when supported.")
         QMessageBox.critical(self,"Download failed",message)
 
     def on_cancelled(self):
+        if self.download_session:
+            self.download_session.cancelled()
         self.set_workflow_state("cancelled","Cancelled; .part file kept for resume. You can retry.")
 
     def cancel_or_close(self):
