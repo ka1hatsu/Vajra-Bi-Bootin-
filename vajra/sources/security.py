@@ -1,6 +1,7 @@
 from urllib.parse import urlparse
 
 ALLOWED_DOWNLOAD_HOSTS = {
+    "dl.fedoraproject.org",
     "download.fedoraproject.org",
     "fedoraproject.org",
     "cdimage.debian.org",
