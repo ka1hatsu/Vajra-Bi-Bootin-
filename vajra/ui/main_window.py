@@ -12,6 +12,7 @@ from vajra.recommender.engine import recommend_distros
 from vajra.ui.download_dialog import DownloadDialog
 from vajra.ui.distro_browser import DistroBrowser
 from vajra.ui.usb_dialog import UsbDeviceDialog
+from vajra.ui.flash_dialog import FlashDialog
 
 
 class ScanWorker(QThread):
@@ -110,7 +111,10 @@ class MainWindow(QMainWindow):
         usb_check.clicked.connect(self.open_usb_devices)
         choice_row.addWidget(manual)
         choice_row.addWidget(existing)
+        flash_usb = QPushButton("Write Image to USB")
+        flash_usb.clicked.connect(self.open_flash_dialog)
         choice_row.addWidget(usb_check)
+        choice_row.addWidget(flash_usb)
         choice_row.addStretch()
         layout.addLayout(choice_row)
         layout.addStretch()
@@ -181,6 +185,10 @@ class MainWindow(QMainWindow):
         layout.addWidget(prefs)
 
         button_row = QHBoxLayout()
+        back = QPushButton("← Back")
+        back.clicked.connect(self.show_welcome)
+        button_row.addWidget(back)
+
         rescan = QPushButton("Scan Again")
         rescan.clicked.connect(self.start_scan)
         recommend = QPushButton("Find My Linux")
@@ -222,6 +230,12 @@ class MainWindow(QMainWindow):
             box.addWidget(key)
             box.addWidget(val)
             self.hardware_grid.addWidget(card, index // 4, index % 4)
+
+    def show_welcome(self):
+        self.stack.setCurrentIndex(0)
+
+    def open_flash_dialog(self):
+        FlashDialog(parent=self).exec()
 
     def open_usb_devices(self):
         UsbDeviceDialog(parent=self).exec()
