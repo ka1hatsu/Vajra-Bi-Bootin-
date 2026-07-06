@@ -6,6 +6,8 @@ from vajra.writer.flash import write_image,FlashCancelled
 from vajra.writer.verify import verify_written_image
 from vajra.writer.preflight import revalidate_target, ensure_image_fits, PreflightError
 from vajra.writer.session import TargetIdentity
+from vajra.writer.helper_client import HelperClient
+from vajra.writer.privilege import PrivilegeError
 
 class FlashWorker(QThread):
     progress=Signal(int); stage=Signal(str); completed=Signal(); failed=Signal(str)
@@ -82,8 +84,19 @@ class FlashDialog(QDialog):
             self.refresh()
             return
 
-        self.worker=FlashWorker(p,validated_device["path"]); self.worker.progress.connect(self.progress.setValue); self.worker.stage.connect(self.stage.setText); self.worker.completed.connect(self.flash_complete); self.worker.failed.connect(self.failed)
-        self.write.setEnabled(False); self.cancel.setEnabled(True); self.worker.start()
+        helper_path = str(Path(__file__).resolve().parents[1] / "writer" / "helper.py")
+        try:
+            self.worker = HelperClient(helper_path, p, target_identity, parent=self)
+        except PrivilegeError as e:
+            QMessageBox.critical(self, "Privilege setup failed", str(e))
+            return
+        self.worker.progress.connect(self.progress.setValue)
+        self.worker.stage.connect(self.stage.setText)
+        self.worker.completed.connect(self.flash_complete)
+        self.worker.failed.connect(self.failed)
+        self.write.setEnabled(False)
+        self.cancel.setEnabled(True)
+        self.worker.start()
     def stop(self):
         if hasattr(self,"worker"):self.worker.cancel(); self.stage.setText("Cancellation requested...")
     def flash_complete(self): self.write.setEnabled(True); self.cancel.setEnabled(False); self.stage.setText("Write and verification complete."); QMessageBox.information(self,"Complete","Image written and verified successfully.")

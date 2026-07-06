@@ -1,75 +1,36 @@
 #!/usr/bin/env python3
-import argparse
-import json
-import os
-import sys
-
+import argparse,json,os
 from vajra.writer.devices import list_storage_devices
 from vajra.writer.flash import write_image
-from vajra.writer.session import TargetIdentity
 from vajra.writer.unmount import unmount_partitions
+from vajra.writer.verify import verify_written_image
 
-
-def fail(message, code=1):
-    print(json.dumps({"event": "error", "message": message}), flush=True)
-    raise SystemExit(code)
-
-
-def find_target(path):
-    for device in list_storage_devices():
-        if device["path"] == path:
-            return device
+def emit(event,**fields): print(json.dumps({"event":event,**fields}),flush=True)
+def fail(msg): emit("error",message=msg); raise SystemExit(1)
+def find(path):
+    for d in list_storage_devices():
+        if d["path"]==path:return d
     fail("Target device is not present.")
-
-
-def validate_target(device, serial, size):
-    if not device.get("eligible"):
-        fail("Target is not an eligible removable device.")
-    if device.get("system_disk"):
-        fail("Refusing to write to the system disk.")
-    if device.get("read_only"):
-        fail("Target is read-only.")
-    if serial and device.get("serial", "") != serial:
-        fail("Target serial number changed.")
-    if int(device.get("size_bytes", 0)) != int(size):
-        fail("Target capacity changed.")
-
-
+def validate_target(d, serial, size):
+    if not d.get("eligible") or d.get("system_disk"):fail("Target failed removable-device safety checks.")
+    if d.get("read_only"):fail("Target is read-only.")
+    if serial and d.get("serial","")!=serial:fail("Target serial number changed.")
+    if int(d.get("size_bytes",0))!=size:fail("Target capacity changed.")
 def main():
-    parser=argparse.ArgumentParser()
-    parser.add_argument("--image", required=True)
-    parser.add_argument("--device", required=True)
-    parser.add_argument("--serial", default="")
-    parser.add_argument("--size", required=True, type=int)
-    args=parser.parse_args()
-
-    if os.geteuid() != 0:
-        fail("Privileged writer helper must run as root.")
-
-    if not os.path.isfile(args.image):
-        fail("Image file does not exist.")
-
-    device=find_target(args.device)
-    validate_target(device,args.serial,args.size)
-
-    if os.path.getsize(args.image) > device["size_bytes"]:
-        fail("Image is larger than target device.")
-
-    unmount_partitions(device)
-
-    # Revalidate after unmount, immediately before opening the block device.
-    device=find_target(args.device)
-    validate_target(device,args.serial,args.size)
-
-    print(json.dumps({"event":"stage","message":"writing"}),flush=True)
-
-    def progress(done,total):
-        percent=int(done*100/total) if total else 0
-        print(json.dumps({"event":"progress","value":percent}),flush=True)
-
-    write_image(args.image,args.device,progress_callback=progress)
-    print(json.dumps({"event":"complete"}),flush=True)
-
-
-if __name__ == "__main__":
-    main()
+    p=argparse.ArgumentParser()
+    p.add_argument("--image",required=True); p.add_argument("--device",required=True)
+    p.add_argument("--serial",default=""); p.add_argument("--size",required=True,type=int)
+    a=p.parse_args()
+    if os.geteuid()!=0:fail("Helper must run as root.")
+    if not os.path.isfile(a.image):fail("Image file does not exist.")
+    d=find(a.device); validate_target(d, a.serial, a.size)
+    if os.path.getsize(a.image)>d["size_bytes"]:fail("Image is larger than target.")
+    emit("stage",message="Unmounting target partitions..."); unmount_partitions(d)
+    d=find(a.device); validate_target(d, a.serial, a.size)
+    emit("stage",message="Writing image...")
+    write_image(a.image,a.device,lambda x,t:emit("progress",value=int(x*80/t) if t else 0))
+    emit("stage",message="Verifying written data...")
+    ok=verify_written_image(a.image,a.device,lambda x,t:emit("progress",value=80+int(x*20/t) if t else 80))
+    if not ok:fail("Post-write verification failed.")
+    emit("progress",value=100); emit("complete")
+if __name__=="__main__":main()
