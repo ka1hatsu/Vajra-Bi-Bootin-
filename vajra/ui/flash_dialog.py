@@ -9,6 +9,7 @@ from vajra.writer.session import TargetIdentity
 from vajra.writer.helper_client import HelperClient
 from vajra.writer.privilege import PrivilegeError
 from vajra.boot.analyzer import analyze_image
+from vajra.boot.compatibility import evaluate
 from vajra.boot.config import BootConfig, PARTITION_SCHEMES, TARGET_SYSTEMS, FILE_SYSTEMS, IMAGE_OPTIONS
 
 class FlashWorker(QThread):
@@ -43,6 +44,12 @@ class FlashDialog(QDialog):
         self.volume_label=QLineEdit(); self.volume_label.setPlaceholderText("Optional volume label"); form.addRow("Volume label",self.volume_label)
         l.addLayout(form)
         self.analysis_label=QLabel("Choose an image to analyze boot compatibility."); self.analysis_label.setWordWrap(True); l.addWidget(self.analysis_label)
+        self.compatibility_label=QLabel("Compatibility: waiting for image selection")
+        self.compatibility_label.setWordWrap(True)
+        l.addWidget(self.compatibility_label)
+        self.current_analysis=None
+        for control in (self.partition_scheme,self.target_system,self.file_system):
+            control.currentTextChanged.connect(self.update_compatibility)
         self.confirm=QLineEdit(); self.confirm.setPlaceholderText("Type ERASE to enable writing"); l.addWidget(self.confirm)
         self.stage=QLabel("Ready"); l.addWidget(self.stage); self.progress=QProgressBar(); l.addWidget(self.progress)
         r=QHBoxLayout(); self.write=QPushButton("Write and Verify"); self.cancel=QPushButton("Cancel"); self.cancel.setEnabled(False)
@@ -53,12 +60,32 @@ class FlashDialog(QDialog):
             self.image.setText(p)
             try:
                 a=analyze_image(p)
+                self.current_analysis = a
                 hints=[]
                 if a.uefi_hint: hints.append("UEFI hint")
                 if a.bios_hint: hints.append("BIOS/bootable hint")
                 self.analysis_label.setText(f"{a.image_type} • {', '.join(hints) if hints else 'no boot-mode hint detected'}. {a.note}")
+                self.update_compatibility()
             except Exception as e:
                 self.analysis_label.setText(f"Analysis unavailable: {e}")
+    def update_compatibility(self):
+        a=getattr(self,"current_analysis",None)
+        if not a:
+            return
+        r=evaluate(
+            a.image_type,
+            self.partition_scheme.currentText(),
+            self.target_system.currentText(),
+            self.file_system.currentText(),
+            a.uefi_hint,
+            a.bios_hint,
+        )
+        prefix={"ok":"Compatible","warning":"Warning","error":"Blocked"}.get(r.severity,"Compatibility")
+        self.compatibility_label.setText(
+            f"{prefix}: {r.message}\n"
+            f"Suggested: {r.recommended_scheme} / {r.recommended_target} / {r.recommended_filesystem}"
+        )
+
     def refresh(self):
         self.combo.clear()
         try:self.devices=eligible_usb_devices()
@@ -67,6 +94,20 @@ class FlashDialog(QDialog):
         if not self.devices:self.combo.addItem("No eligible removable USB device detected")
     def start(self):
         p=self.image.text().strip()
+        a=getattr(self,"current_analysis",None)
+        if a:
+            compatibility=evaluate(
+                a.image_type,
+                self.partition_scheme.currentText(),
+                self.target_system.currentText(),
+                self.file_system.currentText(),
+                a.uefi_hint,
+                a.bios_hint,
+            )
+            if not compatibility.compatible:
+                QMessageBox.warning(self,"Incompatible boot configuration",compatibility.message)
+                return
+
         config=BootConfig(self.partition_scheme.currentText(),self.target_system.currentText(),self.file_system.currentText(),self.image_option.currentText(),self.volume_label.text().strip())
         try: config.validate()
         except ValueError as e:
