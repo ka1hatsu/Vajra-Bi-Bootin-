@@ -46,10 +46,15 @@ def _linux_devices():
         is_system = name == root_parent
 
         mountpoints = []
+        mounted_children = []
         for child in item.get("children", []) or []:
-            for mount in child.get("mountpoints", []) or []:
-                if mount:
-                    mountpoints.append(mount)
+            child_mounts = [m for m in child.get("mountpoints", []) or [] if m]
+            mountpoints.extend(child_mounts)
+            if child.get("path") and child_mounts:
+                mounted_children.append({
+                    "path": child["path"],
+                    "mountpoints": child_mounts,
+                })
         for mount in item.get("mountpoints", []) or []:
             if mount:
                 mountpoints.append(mount)
@@ -66,6 +71,7 @@ def _linux_devices():
             "read_only": bool(item.get("ro")),
             "system_disk": is_system,
             "mountpoints": mountpoints,
+            "mounted_children": mounted_children,
             "eligible": (removable_flag or is_usb) and not is_system and not bool(item.get("ro")),
         })
 
