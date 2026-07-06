@@ -1,0 +1,1 @@
+Phase 7.6 adds pre-destructive ISO inspection, extracted-size estimation, USB capacity validation, large-file policy checking, backend-tool checks, and a final prepared-media summary before the privileged transaction.

@@ -13,6 +13,7 @@ from vajra.boot.compatibility import evaluate
 from vajra.boot.config import BootConfig, PARTITION_SCHEMES, TARGET_SYSTEMS, FILE_SYSTEMS, IMAGE_OPTIONS
 from vajra.boot.planner import build_plan, PreparationPlanError
 from vajra.boot.backend import check_backend_available, BackendUnavailable
+from vajra.boot.preflight_media import run_media_preflight, MediaPreflightError
 
 class FlashWorker(QThread):
     progress=Signal(int); stage=Signal(str); completed=Signal(); failed=Signal(str)
@@ -147,6 +148,40 @@ class FlashDialog(QDialog):
         if not self.devices: QMessageBox.warning(self,"No USB","No eligible USB device is selected."); return
         if self.confirm.text().strip()!="ERASE": QMessageBox.warning(self,"Confirmation required","Type ERASE exactly."); return
         d=self.devices[self.combo.currentIndex()]
+
+        if a and plan.requires_preparation:
+            try:
+                media_preflight = run_media_preflight(
+                    p,
+                    d["size_bytes"],
+                    plan,
+                )
+
+            except (
+                MediaPreflightError,
+                BackendUnavailable,
+            ) as e:
+                QMessageBox.critical(
+                    self,
+                    "Prepared-media preflight failed",
+                    str(e),
+                )
+                return
+
+            answer = QMessageBox.warning(
+                self,
+                "Final prepared-media summary",
+                plan.summary
+                + "\n\n"
+                + media_preflight.summary
+                + "\n\nALL DATA ON THE SELECTED USB "
+                  "WILL BE ERASED. Continue?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+
+            if answer != QMessageBox.Yes:
+                return
 
         # Phase 6: freeze the identity of the device selected by the user.
         target_identity = TargetIdentity.from_device(d)
