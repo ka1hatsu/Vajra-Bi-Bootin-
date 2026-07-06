@@ -13,6 +13,7 @@ from vajra.ui.download_dialog import DownloadDialog
 from vajra.ui.distro_browser import DistroBrowser
 from vajra.ui.usb_dialog import UsbDeviceDialog
 from vajra.ui.flash_dialog import FlashDialog
+from vajra.ui.catalog_download_dialog import CatalogDownloadDialog
 
 
 class ScanWorker(QThread):
