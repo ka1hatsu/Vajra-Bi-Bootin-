@@ -112,7 +112,7 @@ def scan_hardware():
         "os": platform.system(),
         "os_version": platform.release(),
         "architecture": platform.machine().lower(),
-        "cpu": platform.processor() or "Unknown",
+        "cpu": _detect_cpu(),
         "physical_cores": psutil.cpu_count(logical=False) or 1,
         "logical_cores": psutil.cpu_count(logical=True) or 1,
         "ram_gb": round(memory.total / (1024 ** 3), 1),
