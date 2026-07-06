@@ -1,7 +1,9 @@
+import webbrowser
 from pathlib import Path
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QDialog,QVBoxLayout,QLabel,QComboBox,QProgressBar,QPushButton,QHBoxLayout,QFileDialog,QMessageBox
 from vajra.ui.release_resolver_worker import ReleaseResolverWorker
+from vajra.sources.registry import get_official_fallback
 from vajra.downloader.worker import DownloadWorker
 
 class ResolvedDownloadDialog(QDialog):
@@ -39,8 +41,20 @@ class ResolvedDownloadDialog(QDialog):
         self.status.setText(f"Found {len(self.images)} compatible image(s). Choose one to download.")
 
     def resolve_failed(self,message):
-        self.progress.setRange(0,100); self.status.setText(f"Resolver failed: {message}")
-        QMessageBox.warning(self,"ISO resolution failed",message)
+        self.progress.setRange(0,100)
+        self.progress.setValue(0)
+        fallback=get_official_fallback(self.distro_id)
+        self.status.setText('No compatible direct ISO was resolved automatically. You can use the official download page instead.\n\n'+message)
+        if fallback:
+            self.download.setText('Open Official Download Page')
+            self.download.setEnabled(True)
+            try:
+                self.download.clicked.disconnect()
+            except Exception:
+                pass
+            self.download.clicked.connect(lambda: webbrowser.open(fallback))
+        else:
+            self.download.setEnabled(False)
 
     def selected_image(self):
         i=self.combo.currentIndex()
