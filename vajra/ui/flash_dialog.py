@@ -32,7 +32,7 @@ class FlashWorker(QThread):
         except Exception as e: self.failed.emit(str(e))
 
 class FlashDialog(QDialog):
-    def __init__(self,parent=None):
+    def __init__(self,parent=None,image_path=""):
         super().__init__(parent); self.setWindowTitle("Write Image to USB"); self.resize(720,440); self.devices=[]
         l=QVBoxLayout(self); title=QLabel("Write ISO / IMG to USB"); title.setStyleSheet("font-size:24px;font-weight:700;"); l.addWidget(title)
         note=QLabel("Writing destroys existing data on the selected USB drive. Only devices passing Vajra eligibility checks are listed."); note.setWordWrap(True); l.addWidget(note)
@@ -57,20 +57,53 @@ class FlashDialog(QDialog):
         self.stage=QLabel("Ready"); l.addWidget(self.stage); self.progress=QProgressBar(); l.addWidget(self.progress)
         r=QHBoxLayout(); self.write=QPushButton("Write and Verify"); self.cancel=QPushButton("Cancel"); self.cancel.setEnabled(False)
         self.write.clicked.connect(self.start); self.cancel.clicked.connect(self.stop); r.addWidget(self.write); r.addWidget(self.cancel); l.addLayout(r); self.refresh()
+
+        if image_path:
+            self.load_image(image_path)
+    def load_image(self, path):
+        if not path:
+            return
+
+        self.image.setText(path)
+
+        try:
+            a = analyze_image(path)
+            self.current_analysis = a
+
+            hints = []
+
+            if a.uefi_hint:
+                hints.append("UEFI hint")
+
+            if a.bios_hint:
+                hints.append("BIOS/bootable hint")
+
+            self.analysis_label.setText(
+                f"{a.image_type} • "
+                f"{', '.join(hints) if hints else 'no boot-mode hint detected'}. "
+                f"{a.note}"
+            )
+
+            self.update_compatibility()
+
+        except Exception as e:
+            self.current_analysis = None
+            self.analysis_label.setText(
+                f"Analysis unavailable: {e}"
+            )
+
+
     def choose_image(self):
-        p,_=QFileDialog.getOpenFileName(self,"Choose Disk Image",str(Path.home()),"Disk Images (*.iso *.img);;All Files (*)")
+        p, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose Disk Image",
+            str(Path.home()),
+            "Disk Images (*.iso *.img);;All Files (*)"
+        )
+
         if p:
-            self.image.setText(p)
-            try:
-                a=analyze_image(p)
-                self.current_analysis = a
-                hints=[]
-                if a.uefi_hint: hints.append("UEFI hint")
-                if a.bios_hint: hints.append("BIOS/bootable hint")
-                self.analysis_label.setText(f"{a.image_type} • {', '.join(hints) if hints else 'no boot-mode hint detected'}. {a.note}")
-                self.update_compatibility()
-            except Exception as e:
-                self.analysis_label.setText(f"Analysis unavailable: {e}")
+            self.load_image(p)
+
     def update_compatibility(self):
         a=getattr(self,"current_analysis",None)
         if not a:

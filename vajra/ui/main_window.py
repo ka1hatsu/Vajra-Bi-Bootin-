@@ -14,6 +14,8 @@ from vajra.ui.distro_browser import DistroBrowser
 from vajra.ui.usb_dialog import UsbDeviceDialog
 from vajra.ui.flash_dialog import FlashDialog
 from vajra.ui.catalog_download_dialog import CatalogDownloadDialog
+from vajra.workflow.recommendation_download import RecommendationDownloadFlow
+from vajra.ui.resolved_download_dialog import ResolvedDownloadDialog
 
 
 class ScanWorker(QThread):
@@ -36,6 +38,11 @@ class Card(QFrame):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+
+        self.download_flow = RecommendationDownloadFlow(
+            self,
+            self.downloaded_image_ready,
+        )
         self.hardware = None
         self.setWindowTitle("Vajra Bi-Bootin")
         self.resize(1050, 720)
@@ -245,7 +252,22 @@ class MainWindow(QMainWindow):
         DistroBrowser(parent=self).exec()
 
     def open_download_center(self):
-        DownloadDialog(parent=self).exec()
+        self.download_flow.open()
+
+    def open_recommended_download(self, distro_id):
+        architecture = self.hardware.get("architecture", "")
+        dialog = ResolvedDownloadDialog(distro_id, architecture, parent=self)
+        dialog.image_ready.connect(
+            lambda path: FlashDialog(parent=self, image_path=path).exec()
+        )
+        dialog.exec()
+
+    def downloaded_image_ready(self, handoff):
+        dialog = FlashDialog(
+            parent=self,
+            image_path=handoff.path,
+        )
+        dialog.exec()
 
     def show_recommendations(self):
         preferences = {
@@ -287,9 +309,10 @@ class MainWindow(QMainWindow):
             reasons.setWordWrap(True)
             layout.addWidget(reasons)
 
-            download = QPushButton("Open Official Download Page")
+            download = QPushButton("Download ISO")
             download.clicked.connect(
-                lambda checked=False, url=result["official_download_page"]: webbrowser.open(url)
+                lambda checked=False, distro_id=result["id"]:
+                    self.open_recommended_download(distro_id)
             )
             layout.addWidget(download, alignment=Qt.AlignRight)
             cards.addWidget(card)

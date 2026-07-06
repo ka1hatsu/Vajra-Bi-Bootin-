@@ -120,9 +120,11 @@ class CatalogDownloadDialog(QDialog):
         self.worker.start()
 
     def cancel_download(self):
-        if self.worker:
+        if self.worker and self.worker.isRunning():
             self.worker.cancel()
             self.status.setText("Cancelling...")
+        else:
+            self.reject()
 
     def on_progress(self, done, total, speed, eta):
         if total:
