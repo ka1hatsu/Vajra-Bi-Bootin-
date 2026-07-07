@@ -1,5 +1,6 @@
 from vajra.ui.catalog_download_dialog import CatalogDownloadDialog
 from vajra.workflow.image_handoff import ImageHandoff
+from vajra.workflow.session import WorkflowSession, sha256_file
 
 
 class RecommendationDownloadFlow:
@@ -13,6 +14,7 @@ class RecommendationDownloadFlow:
         self.on_image_ready = on_image_ready
         self.dialog = None
         self.selected_name = ""
+        self.session = WorkflowSession()
 
     def open(self, distro_name=""):
         self.selected_name = distro_name or ""
@@ -24,5 +26,7 @@ class RecommendationDownloadFlow:
         self.dialog.exec()
 
     def _ready(self, path):
-        handoff = ImageHandoff.from_download(path, self.selected_name)
+        digest=sha256_file(path)
+        self.session.accept_verified_image(path,digest,self.selected_name)
+        handoff = ImageHandoff.from_download(path, self.selected_name, verified_sha256=digest)
         self.on_image_ready(handoff)

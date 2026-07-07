@@ -1,11 +1,23 @@
 #!/usr/bin/env python3
-import argparse,json,os
+import argparse,json,os,signal
 from vajra.writer.devices import list_storage_devices
 from vajra.writer.flash import write_image
 from vajra.writer.unmount import unmount_partitions
 from vajra.writer.verify import verify_written_image
 from types import SimpleNamespace
 from vajra.boot.prepared_helper import prepare_fat32_media, PreparedMediaError
+
+_cancel_requested=False
+
+def request_cancel(signum, frame):
+    global _cancel_requested
+    _cancel_requested=True
+
+def cancel_requested():
+    return _cancel_requested
+
+signal.signal(signal.SIGTERM, request_cancel)
+signal.signal(signal.SIGINT, request_cancel)
 
 def emit(event,**fields): print(json.dumps({"event":event,**fields}),flush=True)
 def fail(msg): emit("error",message=msg); raise SystemExit(1)
@@ -48,6 +60,7 @@ def main():
                     emit("stage", message=message),
                     emit("progress", value=value),
                 ),
+                cancel_check=cancel_requested,
             )
         except PreparedMediaError as e:
             fail(str(e))

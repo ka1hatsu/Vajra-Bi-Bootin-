@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 
 from vajra.downloader.catalog_adapter import load_download_choices
 from vajra.downloader.worker import DownloadWorker
+from vajra.ui.dialog_theme import DIALOG_STYLE
 
 
 def human_bytes(value):
@@ -20,9 +21,11 @@ def human_bytes(value):
 
 class CatalogDownloadDialog(QDialog):
     image_ready = __import__("PySide6.QtCore", fromlist=["Signal"]).Signal(str)
+    verified_image_ready = __import__("PySide6.QtCore", fromlist=["Signal"]).Signal(str, str)
 
     def __init__(self, parent=None, selected_name=""):
         super().__init__(parent)
+        self.setStyleSheet(DIALOG_STYLE)
         self.setWindowTitle("Download Linux ISO")
         self.resize(620, 280)
         self.worker = None
@@ -55,6 +58,7 @@ class CatalogDownloadDialog(QDialog):
 
         row = QHBoxLayout()
         self.download_button = QPushButton("Download ISO")
+        self.download_button.setObjectName("primaryAction")
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.setEnabled(False)
         row.addWidget(self.download_button)
@@ -149,6 +153,7 @@ class CatalogDownloadDialog(QDialog):
         self.reset_buttons()
         self.progress.setValue(100)
         self.status.setText(f"Verified and ready: {path}")
+        self.verified_image_ready.emit(path, digest)
         self.image_ready.emit(path)
         QMessageBox.information(
             self,

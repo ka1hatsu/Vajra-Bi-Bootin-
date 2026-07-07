@@ -2,15 +2,20 @@ import os, re, subprocess, tempfile
 from vajra.boot.iso_inspector import inspect_iso
 from vajra.boot.large_file_policy import choose_strategy, LargeFilePolicyError
 from vajra.boot.windows_media import split_install_wim, WindowsMediaError
+from vajra.boot.process_runner import run_managed, ManagedCommandError
 
 class PreparedMediaError(RuntimeError):
     pass
 
-def run(cmd, input_text=None):
-    x = subprocess.run(cmd, input=input_text, capture_output=True, text=True)
-    if x.returncode:
-        raise PreparedMediaError(x.stderr.strip() or x.stdout.strip() or "Command failed")
-    return x
+def run(cmd, input_text=None, cancel_check=None):
+    try:
+        return run_managed(
+            cmd,
+            input_text=input_text,
+            cancel_check=cancel_check,
+        )
+    except ManagedCommandError as e:
+        raise PreparedMediaError(str(e)) from e
 
 def sanitize_label(label):
     return (re.sub(r"[^A-Za-z0-9_-]", "_", label or "VAJRA_BOOT")[:11] or "VAJRA_BOOT")
@@ -18,23 +23,23 @@ def sanitize_label(label):
 def partition_path(device):
     return device + ("p1" if device[-1:].isdigit() else "1")
 
-def prepare_fat32_media(image, device, plan, progress=None):
+def prepare_fat32_media(image, device, plan, progress=None, cancel_check=None):
     if os.geteuid() != 0:
         raise PreparedMediaError("Prepared-media helper must run as root.")
     if progress: progress(5, "Creating partition table...")
     if plan.partition_scheme == "GPT":
-        run(["sgdisk", "--zap-all", device])
-        run(["sgdisk", "-n", "1:0:0", "-t", "1:ef00", device])
+        run(["sgdisk", "--zap-all", device], cancel_check=cancel_check)
+        run(["sgdisk", "-n", "1:0:0", "-t", "1:ef00", device], cancel_check=cancel_check)
     elif plan.partition_scheme == "MBR":
-        run(["sfdisk", device], "label: dos\n,0x0c,*\n")
+        run(["sfdisk", device], "label: dos\n,0x0c,*\n", cancel_check=cancel_check)
     else:
         raise PreparedMediaError("Unsupported partition scheme.")
-    run(["partprobe", device])
+    run(["partprobe", device], cancel_check=cancel_check)
     part = partition_path(device)
     if progress: progress(20, "Formatting FAT32...")
-    run(["mkfs.fat", "-F", "32", "-n", sanitize_label(plan.volume_label), part])
+    run(["mkfs.fat", "-F", "32", "-n", sanitize_label(plan.volume_label), part], cancel_check=cancel_check)
     with tempfile.TemporaryDirectory(prefix="vajra-mount-") as mount_dir:
-        run(["mount", part, mount_dir])
+        run(["mount", part, mount_dir], cancel_check=cancel_check)
         try:
             if progress: progress(40, "Extracting ISO contents...")
             info = inspect_iso(image)
@@ -55,7 +60,7 @@ def prepare_fat32_media(image, device, plan, progress=None):
                         "-y",
                         f"-o{extract_dir}",
                         image,
-                    ])
+                    ], cancel_check=cancel_check)
 
                     if progress:
                         progress(
@@ -64,7 +69,7 @@ def prepare_fat32_media(image, device, plan, progress=None):
                         )
 
                     try:
-                        split_install_wim(extract_dir)
+                        split_install_wim(extract_dir, cancel_check=cancel_check)
                     except WindowsMediaError as e:
                         raise PreparedMediaError(str(e))
 
@@ -73,7 +78,7 @@ def prepare_fat32_media(image, device, plan, progress=None):
                         "-a",
                         f"{extract_dir}/.",
                         mount_dir,
-                    ])
+                    ], cancel_check=cancel_check)
 
             else:
                 run([
@@ -82,9 +87,9 @@ def prepare_fat32_media(image, device, plan, progress=None):
                     "-y",
                     f"-o{mount_dir}",
                     image,
-                ])
+                ], cancel_check=cancel_check)
 
-            run(["sync"])
+            run(["sync"], cancel_check=cancel_check)
         finally:
             subprocess.run(["umount", mount_dir], capture_output=True, text=True)
     if progress: progress(100, "Prepared media complete.")

@@ -8,12 +8,18 @@ from vajra.writer.preflight import revalidate_target, ensure_image_fits, Preflig
 from vajra.writer.session import TargetIdentity
 from vajra.writer.helper_client import HelperClient
 from vajra.writer.privilege import PrivilegeError
+from vajra.writer.operation_log import FlashOperationLog
+from vajra.writer.recovery import assess_interruption
 from vajra.boot.analyzer import analyze_image
 from vajra.boot.compatibility import evaluate
 from vajra.boot.config import BootConfig, PARTITION_SCHEMES, TARGET_SYSTEMS, FILE_SYSTEMS, IMAGE_OPTIONS
 from vajra.boot.planner import build_plan, PreparationPlanError
 from vajra.boot.backend import check_backend_available, BackendUnavailable
 from vajra.boot.preflight_media import run_media_preflight, MediaPreflightError
+from vajra.workflow.session import sha256_file
+
+from vajra.ui.dialog_theme import DIALOG_STYLE
+from vajra.workflow.end_to_end_guard import require_flash_ready, WorkflowGuardError
 
 class FlashWorker(QThread):
     progress=Signal(int); stage=Signal(str); completed=Signal(); failed=Signal(str)
@@ -31,31 +37,43 @@ class FlashWorker(QThread):
         except PermissionError: self.failed.emit("Permission denied. Production builds should use a narrowly scoped privileged helper.")
         except Exception as e: self.failed.emit(str(e))
 
+class SectionLabel(QLabel):
+    def __init__(self, text):
+        super().__init__(text)
+        self.setObjectName("sectionLabel")
+
+
 class FlashDialog(QDialog):
-    def __init__(self,parent=None,image_path=""):
-        super().__init__(parent); self.setWindowTitle("Write Image to USB"); self.resize(720,440); self.devices=[]
-        l=QVBoxLayout(self); title=QLabel("Write ISO / IMG to USB"); title.setStyleSheet("font-size:24px;font-weight:700;"); l.addWidget(title)
-        note=QLabel("Writing destroys existing data on the selected USB drive. Only devices passing Vajra eligibility checks are listed."); note.setWordWrap(True); l.addWidget(note)
+    def __init__(self,parent=None,image_path="",verified_sha256=""):
+        super().__init__(parent)
+        self.setStyleSheet(DIALOG_STYLE); self.operation_log=FlashOperationLog(); self.last_flash_stage="ready"; self.verified_sha256=(verified_sha256 or "").lower(); self.setWindowTitle("Write Image to USB"); self.resize(820,680); self.devices=[]
+        l=QVBoxLayout(self); title=QLabel("Write ISO / IMG to USB"); title.setObjectName("dialogTitle"); l.addWidget(title)
+        note=QLabel("Select an image and an eligible USB device. Writing will erase the selected device."); note.setObjectName("dialogSubtitle"); note.setWordWrap(True); l.addWidget(note)
+        l.addWidget(SectionLabel("BOOT IMAGE"))
         self.image=QLineEdit(); self.image.setPlaceholderText("Choose an .iso or .img file"); choose=QPushButton("Choose Image"); choose.clicked.connect(self.choose_image)
         r=QHBoxLayout(); r.addWidget(self.image); r.addWidget(choose); l.addLayout(r)
+        l.addWidget(SectionLabel("TARGET USB DEVICE"))
         self.combo=QComboBox(); l.addWidget(self.combo); refresh=QPushButton("Refresh Eligible USB Devices"); refresh.clicked.connect(self.refresh); l.addWidget(refresh)
-        form=QFormLayout()
+        l.addWidget(SectionLabel("BOOT AND FORMAT OPTIONS"))
+        form=QFormLayout(); form.setHorizontalSpacing(18); form.setVerticalSpacing(9)
         self.image_option=QComboBox(); self.image_option.addItems(IMAGE_OPTIONS); form.addRow("Image option",self.image_option)
         self.partition_scheme=QComboBox(); self.partition_scheme.addItems(PARTITION_SCHEMES); form.addRow("Partition scheme",self.partition_scheme)
         self.target_system=QComboBox(); self.target_system.addItems(TARGET_SYSTEMS); form.addRow("Target system",self.target_system)
         self.file_system=QComboBox(); self.file_system.addItems(FILE_SYSTEMS); form.addRow("File system",self.file_system)
         self.volume_label=QLineEdit(); self.volume_label.setPlaceholderText("Optional volume label"); form.addRow("Volume label",self.volume_label)
         l.addLayout(form)
+        l.addWidget(SectionLabel("COMPATIBILITY"))
         self.analysis_label=QLabel("Choose an image to analyze boot compatibility."); self.analysis_label.setWordWrap(True); l.addWidget(self.analysis_label)
-        self.compatibility_label=QLabel("Compatibility: waiting for image selection")
+        self.compatibility_label=QLabel("Compatibility: waiting for image selection"); self.compatibility_label.setObjectName("compatibilityPanel")
         self.compatibility_label.setWordWrap(True)
         l.addWidget(self.compatibility_label)
         self.current_analysis=None
         for control in (self.partition_scheme,self.target_system,self.file_system):
             control.currentTextChanged.connect(self.update_compatibility)
-        self.confirm=QLineEdit(); self.confirm.setPlaceholderText("Type ERASE to enable writing"); l.addWidget(self.confirm)
-        self.stage=QLabel("Ready"); l.addWidget(self.stage); self.progress=QProgressBar(); l.addWidget(self.progress)
-        r=QHBoxLayout(); self.write=QPushButton("Write and Verify"); self.cancel=QPushButton("Cancel"); self.cancel.setEnabled(False)
+        l.addWidget(SectionLabel("SAFETY CONFIRMATION"))
+        self.confirm=QLineEdit(); self.confirm.setObjectName("eraseConfirmation"); self.confirm.setPlaceholderText("Type ERASE to enable writing"); l.addWidget(self.confirm)
+        self.stage=QLabel("Ready"); self.stage.setObjectName("stageStatus"); l.addWidget(self.stage); self.progress=QProgressBar(); l.addWidget(self.progress)
+        r=QHBoxLayout(); self.write=QPushButton("Write and Verify"); self.write.setObjectName("primaryAction"); self.cancel=QPushButton("Cancel"); self.cancel.setObjectName("dangerAction"); self.cancel.setEnabled(False)
         self.write.clicked.connect(self.start); self.cancel.clicked.connect(self.stop); r.addWidget(self.write); r.addWidget(self.cancel); l.addLayout(r); self.refresh()
 
         if image_path:
@@ -92,6 +110,14 @@ class FlashDialog(QDialog):
                 f"Analysis unavailable: {e}"
             )
 
+
+    def validate_verified_handoff(self):
+        if not self.verified_sha256:
+            return None
+        return require_flash_ready(
+            self.image.text().strip(),
+            self.verified_sha256,
+        )
 
     def choose_image(self):
         p, _ = QFileDialog.getOpenFileName(
@@ -247,6 +273,12 @@ class FlashDialog(QDialog):
             self.refresh()
             return
 
+        if self.verified_sha256:
+            current_digest=sha256_file(p)
+            if current_digest.lower()!=self.verified_sha256:
+                QMessageBox.critical(self,"Verified image changed","The image file no longer matches the SHA-256 digest verified at download time. Flashing was blocked.")
+                return
+
         helper_path = str(Path(__file__).resolve().parents[1] / "writer" / "helper.py")
         try:
             self.worker = HelperClient(
@@ -258,13 +290,47 @@ class FlashDialog(QDialog):
             QMessageBox.critical(self, "Privilege setup failed", str(e))
             return
         self.worker.progress.connect(self.progress.setValue)
-        self.worker.stage.connect(self.stage.setText)
+        self.worker.stage.connect(self.on_flash_stage)
         self.worker.completed.connect(self.flash_complete)
         self.worker.failed.connect(self.failed)
+        self.worker.cancelled.connect(self.flash_cancelled)
         self.write.setEnabled(False)
         self.cancel.setEnabled(True)
+        self.operation_log.append("started",image=p,device=validated_device["path"])
         self.worker.start()
+    def on_flash_stage(self,message):
+        self.last_flash_stage=str(message)
+        self.stage.setText(str(message))
+        self.operation_log.append("stage",stage=self.last_flash_stage)
+
+    def refresh_device_state(self):
+        self.refresh()
+        self.stage.setText("Device state refreshed.")
+
     def stop(self):
-        if hasattr(self,"worker"):self.worker.cancel(); self.stage.setText("Cancellation requested...")
-    def flash_complete(self): self.write.setEnabled(True); self.cancel.setEnabled(False); self.stage.setText("Write and verification complete."); QMessageBox.information(self,"Complete","Image written and verified successfully.")
-    def failed(self,msg): self.write.setEnabled(True); self.cancel.setEnabled(False); self.stage.setText("Stopped"); QMessageBox.critical(self,"Write failed",msg)
+        if hasattr(self,"worker") and self.worker.is_running():
+            self.cancel.setEnabled(False)
+            self.worker.cancel()
+            self.stage.setText("Cancellation requested; waiting for helper shutdown...")
+
+    def flash_complete(self):
+        self.operation_log.append("completed")
+        self.write.setEnabled(True); self.cancel.setEnabled(False)
+        self.stage.setText("Write and verification complete.")
+        QMessageBox.information(self,"Complete","Image written and verified successfully.")
+
+    def flash_cancelled(self):
+        self.operation_log.append("cancelled")
+        self.write.setEnabled(True); self.cancel.setEnabled(False)
+        assessment=assess_interruption(self.last_flash_stage)
+        self.operation_log.append("recovery_assessment",state=assessment.state,stage=self.last_flash_stage)
+        self.stage.setText(assessment.message)
+        QMessageBox.information(self,"Operation cancelled",f"Recovery state: {assessment.state}\n\n{assessment.message}")
+        self.refresh_device_state()
+    def failed(self,msg):
+        assessment=assess_interruption(self.last_flash_stage)
+        self.operation_log.append("failed",message=str(msg),stage=self.last_flash_stage,recovery_state=assessment.state)
+        self.write.setEnabled(True); self.cancel.setEnabled(False)
+        self.stage.setText(assessment.message)
+        QMessageBox.critical(self,"Write failed",f"{msg}\n\nRecovery state: {assessment.state}\n{assessment.message}")
+        self.refresh_device_state()

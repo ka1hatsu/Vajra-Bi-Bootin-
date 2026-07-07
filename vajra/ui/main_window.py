@@ -1,5 +1,7 @@
+from pathlib import Path
 import webbrowser
 from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtGui import QPixmap, QIcon
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QStackedWidget, QFrame, QGridLayout, QComboBox, QScrollArea,
@@ -14,6 +16,7 @@ from vajra.ui.distro_browser import DistroBrowser
 from vajra.ui.usb_dialog import UsbDeviceDialog
 from vajra.ui.flash_dialog import FlashDialog
 from vajra.ui.download_history_dialog import DownloadHistoryDialog
+from vajra.ui.operation_report_dialog import OperationReportDialog
 from vajra.ui.catalog_download_dialog import CatalogDownloadDialog
 from vajra.workflow.recommendation_download import RecommendationDownloadFlow
 from vajra.ui.resolved_download_dialog import ResolvedDownloadDialog
@@ -47,6 +50,8 @@ class MainWindow(QMainWindow):
         )
         self.hardware = None
         self.setWindowTitle("Vajra Bi-Bootin")
+        asset_path = Path(__file__).resolve().parents[1] / "assets" / "vajra_logo.png"
+        self.setWindowIcon(QIcon(str(asset_path)))
         self.resize(1050, 720)
 
         self.stack = QStackedWidget()
@@ -78,58 +83,58 @@ class MainWindow(QMainWindow):
 
     def build_welcome_page(self):
         page = QWidget()
+        page.setObjectName("welcomePage")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(70, 60, 70, 60)
+        layout.setContentsMargins(80, 34, 80, 40)
+        layout.setSpacing(12)
         layout.addStretch()
 
-        brand = QLabel("VAJRA")
-        brand.setObjectName("brand")
-        brand.setAlignment(Qt.AlignCenter)
-        layout.addWidget(brand)
+        logo = QLabel()
+        logo.setObjectName("welcomeLogo")
+        logo.setAlignment(Qt.AlignCenter)
+        logo_path = Path(__file__).resolve().parents[1] / "assets" / "vajra_logo.png"
+        pixmap = QPixmap(str(logo_path))
+        if not pixmap.isNull():
+            logo.setPixmap(pixmap.scaled(340, 220, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo.setAccessibleName("Vajra logo")
+        layout.addWidget(logo)
 
-        name = QLabel("Bi-Bootin")
+        name = QLabel("Vajra Bi-Bootin")
         name.setObjectName("hero")
         name.setAlignment(Qt.AlignCenter)
         layout.addWidget(name)
 
-        desc = QLabel(
-            "Find a Linux distribution suited to your hardware and needs.\n"
-            "Vajra scans locally, filters incompatible choices, and explains its ranking."
-        )
-        desc.setObjectName("subtitle")
+        desc = QLabel("Choose the right Linux image, download it safely, and create bootable USB media.")
+        desc.setObjectName("welcomeSubtitle")
         desc.setAlignment(Qt.AlignCenter)
         desc.setWordWrap(True)
         layout.addWidget(desc)
 
         start = QPushButton("Scan My PC")
         start.setObjectName("primary")
-        start.setFixedWidth(220)
+        start.setFixedWidth(240)
+        start.setToolTip("Detect hardware locally and recommend compatible Linux distributions.")
         start.clicked.connect(self.start_scan)
-        row = QHBoxLayout()
-        row.addStretch()
-        row.addWidget(start)
-        row.addStretch()
+        row = QHBoxLayout(); row.addStretch(); row.addWidget(start); row.addStretch()
         layout.addLayout(row)
 
-        choice_row = QHBoxLayout()
-        manual = QPushButton("Choose Linux Myself")
-        manual.clicked.connect(self.open_distro_browser)
-        existing = QPushButton("Download / Existing ISO Path")
-        existing.clicked.connect(self.open_download_center)
-        history = QPushButton("Download History")
-        history.clicked.connect(self.open_download_history)
-        choice_row.addStretch()
-        usb_check = QPushButton("Check USB Devices")
-        usb_check.clicked.connect(self.open_usb_devices)
-        choice_row.addWidget(manual)
-        choice_row.addWidget(existing)
-        choice_row.addWidget(history)
-        flash_usb = QPushButton("Write Image to USB")
-        flash_usb.clicked.connect(self.open_flash_dialog)
-        choice_row.addWidget(usb_check)
-        choice_row.addWidget(flash_usb)
-        choice_row.addStretch()
-        layout.addLayout(choice_row)
+        quick = QHBoxLayout()
+        manual = QPushButton("Choose Linux"); manual.clicked.connect(self.open_distro_browser)
+        existing = QPushButton("Download ISO"); existing.clicked.connect(self.open_download_center)
+        usb_check = QPushButton("USB Devices"); usb_check.clicked.connect(self.open_usb_devices)
+        flash_usb = QPushButton("Write to USB"); flash_usb.setObjectName("accentAction"); flash_usb.clicked.connect(self.open_flash_dialog)
+        quick.addStretch()
+        for button in (manual, existing, usb_check, flash_usb):
+            button.setMinimumWidth(145)
+            quick.addWidget(button)
+        quick.addStretch()
+        layout.addLayout(quick)
+
+        secondary = QHBoxLayout()
+        history = QPushButton("Download History"); history.setObjectName("secondaryAction"); history.clicked.connect(self.open_download_history)
+        reports = QPushButton("Operation Reports"); reports.setObjectName("secondaryAction"); reports.clicked.connect(self.open_operation_reports)
+        secondary.addStretch(); secondary.addWidget(history); secondary.addWidget(reports); secondary.addStretch()
+        layout.addLayout(secondary)
         layout.addStretch()
         return page
 
@@ -250,6 +255,9 @@ class MainWindow(QMainWindow):
     def open_flash_dialog(self):
         FlashDialog(parent=self).exec()
 
+    def open_operation_reports(self):
+        OperationReportDialog(parent=self).exec()
+
     def open_download_history(self):
         dialog = DownloadHistoryDialog(parent=self)
         dialog.flash_requested.connect(
@@ -260,13 +268,11 @@ class MainWindow(QMainWindow):
 
     def resume_history_download(self,distro_id,architecture,path):
         dialog=ResolvedDownloadDialog(distro_id,architecture,parent=self,resume_destination=path)
-        dialog.image_ready.connect(self.open_verified_history_image)
+        dialog.verified_image_ready.connect(self.open_verified_history_image)
         dialog.exec()
 
-    def open_verified_history_image(self, path):
-        dialog = FlashDialog(parent=self)
-
-        dialog.image.setText(path)
+    def open_verified_history_image(self, path, digest=""):
+        dialog = FlashDialog(parent=self, image_path=path, verified_sha256=digest)
 
         # Re-run image analysis if the current FlashDialog exposes it.
         try:
@@ -289,8 +295,8 @@ class MainWindow(QMainWindow):
     def open_recommended_download(self, distro_id):
         architecture = self.hardware.get("architecture", "")
         dialog = ResolvedDownloadDialog(distro_id, architecture, parent=self)
-        dialog.image_ready.connect(
-            lambda path: FlashDialog(parent=self, image_path=path).exec()
+        dialog.verified_image_ready.connect(
+            lambda path, digest: FlashDialog(parent=self, image_path=path, verified_sha256=digest).exec()
         )
         dialog.exec()
 
@@ -298,6 +304,7 @@ class MainWindow(QMainWindow):
         dialog = FlashDialog(
             parent=self,
             image_path=handoff.path,
+            verified_sha256=handoff.verified_sha256,
         )
         dialog.exec()
 
@@ -459,4 +466,22 @@ class MainWindow(QMainWindow):
         QScrollArea {
             border: none;
         }
+
+        #welcomePage {
+            background: qradialgradient(cx:0.5, cy:0.35, radius:0.9,
+                stop:0 #111a32, stop:0.55 #0b1224, stop:1 #080d19);
+        }
+        #welcomeLogo { min-height: 210px; background: transparent; }
+        #welcomeSubtitle {
+            font-size: 16px; color: #aebbd3; padding: 2px 16px 12px 16px;
+        }
+        QPushButton#accentAction {
+            background: #1d62d8; border: 1px solid #3279ef; font-weight: 700;
+        }
+        QPushButton#accentAction:hover { background: #2870e8; }
+        QPushButton#secondaryAction {
+            background: transparent; border: 1px solid #2d3955;
+            color: #aebbd3; padding: 8px 14px;
+        }
+        QPushButton#secondaryAction:hover { background: #141e34; color: #eef4ff; }
         """

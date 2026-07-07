@@ -8,11 +8,15 @@ from vajra.downloader.worker import DownloadWorker
 from vajra.verification.policy import evaluate_download_verification
 from vajra.downloads.session import DownloadSession
 
+from vajra.ui.dialog_theme import DIALOG_STYLE
+
 class ResolvedDownloadDialog(QDialog):
     image_ready=Signal(str)
+    verified_image_ready=Signal(str,str)
 
     def __init__(self,distro_id,architecture,parent=None,resume_destination=None):
         super().__init__(parent)
+        self.setStyleSheet(DIALOG_STYLE)
         self.distro_id=distro_id; self.architecture=architecture
         self.resume_destination=resume_destination
         self.images=[]; self.resolver=None; self.worker=None; self.workflow_state="resolving"; self.download_session=None
@@ -22,7 +26,7 @@ class ResolvedDownloadDialog(QDialog):
         self.status.setWordWrap(True); layout.addWidget(self.status)
         self.combo=QComboBox(); self.combo.setEnabled(False); layout.addWidget(self.combo)
         self.progress=QProgressBar(); layout.addWidget(self.progress)
-        row=QHBoxLayout(); self.download=QPushButton("Download ISO"); self.download.setEnabled(False)
+        row=QHBoxLayout(); self.download=QPushButton("Download ISO"); self.download.setObjectName("primaryAction"); self.download.setEnabled(False)
         self.cancel=QPushButton("Cancel"); row.addWidget(self.download); row.addWidget(self.cancel); layout.addLayout(row)
         self.download.clicked.connect(self.start_download); self.cancel.clicked.connect(self.cancel_or_close)
         self.resolve()
@@ -149,6 +153,7 @@ class ResolvedDownloadDialog(QDialog):
         self.set_workflow_state("verified", self.status.text())
         if self.download_session:
             self.download_session.completed(path,digest,True)
+        self.verified_image_ready.emit(path,digest)
         self.image_ready.emit(path)
         self.accept()
 
