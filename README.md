@@ -1,14 +1,16 @@
 # Vajra Bi-Bootin
 
-Vajra Bi-Bootin is a Linux desktop utility that helps people choose a distribution for their hardware, download an official image, verify it, and prepare bootable USB media from one application.
-
-The project started as a hardware-aware distro recommender and gradually grew into a complete download and USB preparation workflow. The recommendation engine is deterministic: hardware compatibility is checked first, then suitable distributions are ranked using the user's intended use and experience level.
-
 <p align="center">
   <img src="docs/images/welcome-screen.png"
        alt="Vajra Bi-Bootin welcome screen"
        width="850">
 </p>
+
+Vajra Bi-Bootin is a Linux desktop utility that helps people choose a distribution for their hardware, download an official image, verify it, and prepare bootable USB media from one application.
+
+The project started as a hardware-aware distro recommender and gradually grew into a complete download and USB preparation workflow. The recommendation engine is deterministic: hardware compatibility is checked first, then suitable distributions are ranked using the user's intended use and experience level.
+
+
 
 ## What it does
 
