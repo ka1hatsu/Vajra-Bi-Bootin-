@@ -1,108 +1,101 @@
-# Vajra Bi (Bootin)
+# Vajra Bi-Bootin
 
-AI-assisted Linux distribution recommendation and bootable-media utility.
+Vajra Bi-Bootin is a Linux desktop utility that helps people choose a distribution for their hardware, download an official image, verify it, and prepare bootable USB media from one application.
 
-## Phase 1
+The project started as a hardware-aware distro recommender and gradually grew into a complete download and USB preparation workflow. The recommendation engine is deterministic: hardware compatibility is checked first, then suitable distributions are ranked using the user's intended use and experience level.
 
-This prototype:
-- scans CPU, architecture, RAM, GPU, disk space, firmware mode, and Secure Boot status;
-- loads a local Linux distribution catalog;
-- filters incompatible choices;
-- scores compatible distributions;
-- prints recommendations and official download pages.
+## What it does
 
-## Run
+- Scans CPU architecture, memory, graphics, storage and firmware information locally.
+- Filters out distributions that do not match the detected architecture.
+- Ranks compatible Linux distributions and explains the recommendation.
+- Resolves current ISO releases from supported official sources.
+- Downloads large images with progress reporting, cancellation and resume support.
+- Verifies downloaded images with SHA-256 when a trusted checksum is available.
+- Keeps download history so completed images can be reused.
+- Detects eligible removable USB devices and blocks system disks and read-only targets.
+- Checks image size, target capacity and device identity before a write begins.
+- Supports raw image writing and prepared-media workflows where the selected image and configuration allow them.
+- Verifies written data after the operation and records operation status for recovery guidance.
+
+## Current status
+
+Vajra is under active development. The core recommendation, download, verification and USB workflow is implemented, but the project should still be treated as pre-release software. USB writing is a destructive operation, so test changes with disposable media before relying on them for important data.
+
+The application currently targets Linux. Some parts of the media preparation pipeline depend on common system tools and `pkexec` for the narrowly scoped privileged helper.
+
+## Requirements
+
+- Python 3.10 or newer
+- Linux
+- PySide6
+- `lsblk` and other standard Linux storage utilities
+- `pkexec` for operations that require elevated access
+
+Additional media tools may be required for some prepared-media workflows. The application checks backend availability before starting those operations.
+
+## Installation
+
+Clone the repository and create a virtual environment:
 
 ```bash
-python -m venv .venv
+git clone <repository-url>
+cd Vajra-Bi-Bootin-
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+```
+
+Start the application with:
+
+```bash
 python main.py
 ```
 
-On Windows, activate with:
+## Running the tests
 
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
-## Test
+Install pytest in the virtual environment if it is not already available, then run the complete suite:
 
 ```bash
 pip install pytest
-pytest
+python -m pytest tests/ -q
 ```
 
-> The distro catalog is starter data for the prototype. Hardware requirements and boot support should be verified against official distro documentation before release.
-
-
-## Phase 2 GUI
-
-Install dependencies and launch:
+For a quick syntax check of the application package:
 
 ```bash
-pip install -r requirements.txt
-python main.py
+python -m compileall -q vajra
 ```
 
-The desktop GUI provides:
-- welcome screen;
-- background hardware scan;
-- hardware summary cards;
-- usage and experience preferences;
-- ranked Linux recommendations;
-- recommendation reasons;
-- buttons that open official distro download pages.
+## How the workflow is organised
 
-The recommendation engine remains deterministic. The current GUI does not write USB drives yet.
-\n\n## Phase 3\nAdds streamed image downloads, progress, cancellation, `.part` cleanup, SHA-256 verification, a GUI Download Center, and checksum tests.\n
+The source is split by responsibility rather than by UI screen:
 
-## Phase 3.1: Optional AI path and manual distro choice
+- `vajra/hardware/` collects local hardware information.
+- `vajra/catalog/` loads distribution metadata.
+- `vajra/recommender/` filters and ranks distributions.
+- `vajra/sources/` resolves release images and validates download sources.
+- `vajra/downloader/` handles image downloads and checksum work.
+- `vajra/verification/` contains verification policy decisions.
+- `vajra/workflow/` carries trusted state between download and USB preparation.
+- `vajra/writer/` contains device discovery, preflight checks, the privileged helper protocol and write verification.
+- `vajra/boot/` analyses images and plans prepared-media operations.
+- `vajra/ui/` contains the PySide6 interface.
 
-The home workflow now supports:
-- Smart Recommendation: scan hardware and rank compatible distros.
-- Choose Linux Myself: search and browse the distro catalog without AI.
-- Download Center: use a valid direct ISO/image URL and optionally verify SHA-256.
+A verified download carries its digest into the USB workflow. Before the operation begins, the application checks the image again and revalidates the selected device. The privileged helper independently checks the target identity before touching the device. These checks are intentionally repeated at different boundaries.
 
-The manual path never requires accepting an AI recommendation. Hard compatibility checks should warn about genuine architecture incompatibility, but ordinary preference choices remain with the user.
+## Safety notes
 
-This merge package intentionally omits `vajra/hardware/scanner.py` so a locally improved scanner is not overwritten.
+Writing an image to a USB device erases data on the selected target. Vajra uses several safeguards, including removable-device eligibility checks, system-disk blocking, an explicit `ERASE` confirmation, a final device summary, capacity checks and target identity revalidation.
 
+Those safeguards reduce mistakes, but they do not replace checking the selected device yourself. Keep backups of anything important and avoid testing development builds with storage that contains valuable data.
 
-## Phase 4: USB detection and safety layer
+## Contributing
 
-Phase 4 adds Linux block-device discovery using `lsblk`, removable/USB eligibility checks,
-root/system-disk blocking, read-only-device blocking, model/capacity/transport/mountpoint display,
-refresh support, and a GUI safety-check dialog.
+Bug reports and small, focused pull requests are welcome. If you are changing the download or USB workflow, please include tests for the behavior you changed and run the full suite before submitting the change.
 
-**Phase 4 is detection-only. It does not write, erase, format, mount, or unmount drives.**
-Actual image writing belongs to a later phase after additional safeguards and testing.
+For larger changes, open an issue first so the design can be discussed before code is written. In particular, changes around device detection, privilege boundaries, cancellation and verification should be kept small and easy to review.
 
-The merge package continues to omit `vajra/hardware/scanner.py`, preserving the user's improved scanner.
-\n\n## Phase 5\nAdds guarded ISO/IMG writing, image/device size checks, explicit ERASE confirmation, final device identity confirmation, progress, cancellation requests, fsync, and post-write byte-range SHA-256 verification. Raw device access may require privileges; production packaging should use a narrowly scoped privileged helper rather than running the full GUI as root.\n
-## Phase 5: USB image writing and post-write verification
+## License
 
-Phase 5 adds the guarded USB image-writing pipeline:
-
-- ISO and IMG file selection.
-- Eligible removable USB device selection.
-- Image-size and target-capacity validation.
-- Mandatory `ERASE` confirmation before writing.
-- Final destructive-action confirmation showing the exact device path, model, capacity, and selected image.
-- Chunked raw image writing with progress reporting.
-- Cooperative cancellation support during writing and verification.
-- `fsync` before reporting write completion.
-- Post-write SHA-256 verification of the written image data.
-- Protection inherited from Phase 4 against system disks, read-only devices, and ineligible storage devices.
-
-> **Warning:** Writing an image destroys existing data on the selected target device. Vajra performs multiple checks and confirmations, but users should still verify the exact target device before approving the operation.
-
-### Phase 5 fixes
-
-The following fixes were added after the initial Phase 5 implementation:
-
-- Fixed cancellation during the verification stage.
-- Improved cancellation responsiveness.
-- Fixed the `QDialog.done()` method-name collision in the PySide6 flash dialog.
-- Added a Back button from the Hardware Detected page to the Welcome page.
-
+A license file has not been added yet. Until one is chosen, the repository is publicly visible but should not be assumed to grant open-source redistribution rights.
