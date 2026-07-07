@@ -1,1 +1,0 @@
-Fixes MX HTTPS/stable-feed resolution and moves Fedora resolution to Fedora release metadata. Both remain fail-closed with the existing official-page fallback.\n
