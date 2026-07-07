@@ -1,9 +1,11 @@
 import sys
+from types import SimpleNamespace
 
 import pytest
 
 from vajra.boot.process_runner import ManagedCommandError, run_managed
 from vajra.writer import flash
+from vajra.writer import privilege
 from vajra.writer import verify
 
 
@@ -62,3 +64,25 @@ def test_managed_command_reports_nonzero_output():
 
     with pytest.raises(ManagedCommandError, match="expected failure"):
         run_managed(command, poll_interval=0.01)
+
+
+def test_privileged_helper_uses_active_python(monkeypatch):
+    monkeypatch.setattr(privilege.shutil, "which", lambda name: "/usr/bin/pkexec")
+    identity = SimpleNamespace(path="/dev/sdz", serial="SERIAL", size_bytes=4096)
+
+    command = privilege.build_privileged_command(
+        "/opt/vajra/vajra/writer/helper.py",
+        "/tmp/image.iso",
+        identity,
+    )
+
+    assert command[:3] == [
+        "/usr/bin/pkexec",
+        sys.executable,
+        "/opt/vajra/vajra/writer/helper.py",
+    ]
+    assert command[-6:] == [
+        "--device", "/dev/sdz",
+        "--serial", "SERIAL",
+        "--size", "4096",
+    ]
