@@ -39,6 +39,7 @@ class ResolvedDownloadDialog(QDialog):
 
     def resolved(self,images):
         self.progress.setRange(0,100); self.progress.setValue(0); self.images=list(images); self.combo.clear()
+        self.cancel.setEnabled(True)
         for image in self.images:
             self.combo.addItem(f"{image.distro} {image.version} | {image.architecture} | {image.filename}")
         if not self.images:
@@ -51,6 +52,7 @@ class ResolvedDownloadDialog(QDialog):
         self.progress.setRange(0,100)
         self.progress.setValue(0)
         self.cancel.setText("Close")
+        self.cancel.setEnabled(True)
         fallback=get_official_fallback(self.distro_id)
         self.status.setText('No compatible direct ISO was resolved automatically. You can use the official download page instead.\n\n'+message)
         if fallback:
