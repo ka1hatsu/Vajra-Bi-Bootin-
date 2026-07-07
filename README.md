@@ -39,11 +39,11 @@ Additional media tools may be required for some prepared-media workflows. The ap
 Clone the repository and create a virtual environment:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/ka1hatsu/Vajra-Bi-Bootin-.git
 cd Vajra-Bi-Bootin-
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 Start the application with:
@@ -57,15 +57,17 @@ python main.py
 Install pytest in the virtual environment if it is not already available, then run the complete suite:
 
 ```bash
-pip install pytest
+python -m pip install pytest
 python -m pytest tests/ -q
 ```
 
 For a quick syntax check of the application package:
 
 ```bash
-python -m compileall -q vajra
+python -m compileall -q main.py vajra tests
 ```
+
+The repository also runs the syntax check and full test suite automatically through GitHub Actions on pushes to `main` and on pull requests.
 
 ## How the workflow is organised
 
