@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-import argparse,json,os,signal
+import argparse,json,os,signal,sys
+from pathlib import Path
+
+# The helper is launched as a script by pkexec. Add the project root explicitly
+# so package imports work even when the application was started outside the
+# repository directory or from a desktop launcher.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from vajra.writer.devices import list_storage_devices
 from vajra.writer.flash import write_image, FlashCancelled
 from vajra.writer.unmount import unmount_partitions
