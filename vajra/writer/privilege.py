@@ -1,5 +1,6 @@
 import shutil
 import subprocess
+import sys
 
 
 class PrivilegeError(RuntimeError):
@@ -12,6 +13,7 @@ def build_privileged_command(helper_path, image_path, identity):
         raise PrivilegeError("pkexec is not installed or unavailable.")
     return [
         pkexec,
+        sys.executable,
         helper_path,
         "--image", image_path,
         "--device", identity.path,
