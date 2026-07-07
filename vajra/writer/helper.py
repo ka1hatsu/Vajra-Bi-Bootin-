@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 import argparse,json,os,signal
 from vajra.writer.devices import list_storage_devices
-from vajra.writer.flash import write_image
+from vajra.writer.flash import write_image, FlashCancelled
 from vajra.writer.unmount import unmount_partitions
-from vajra.writer.verify import verify_written_image
+from vajra.writer.verify import verify_written_image, VerificationCancelled
 from types import SimpleNamespace
 from vajra.boot.prepared_helper import prepare_fat32_media, PreparedMediaError
 
@@ -67,10 +67,23 @@ def main():
         emit("complete")
         return
 
-    emit("stage",message="Writing image...")
-    write_image(a.image,a.device,lambda x,t:emit("progress",value=int(x*80/t) if t else 0))
-    emit("stage",message="Verifying written data...")
-    ok=verify_written_image(a.image,a.device,lambda x,t:emit("progress",value=80+int(x*20/t) if t else 80))
+    try:
+        emit("stage",message="Writing image...")
+        write_image(
+            a.image,
+            a.device,
+            lambda x,t:emit("progress",value=int(x*80/t) if t else 0),
+            cancel_check=cancel_requested,
+        )
+        emit("stage",message="Verifying written data...")
+        ok=verify_written_image(
+            a.image,
+            a.device,
+            lambda x,t:emit("progress",value=80+int(x*20/t) if t else 80),
+            cancel_check=cancel_requested,
+        )
+    except (FlashCancelled, VerificationCancelled):
+        raise SystemExit(130)
     if not ok:fail("Post-write verification failed.")
     emit("progress",value=100); emit("complete")
 if __name__=="__main__":main()
