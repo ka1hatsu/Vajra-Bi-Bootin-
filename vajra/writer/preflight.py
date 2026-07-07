@@ -1,8 +1,7 @@
-import json
-import subprocess
 from pathlib import Path
 
 from vajra.writer.devices import list_storage_devices
+from vajra.writer.unmount import UnmountError, unmount_partitions
 
 
 class PreflightError(RuntimeError):
@@ -32,18 +31,11 @@ def revalidate_target(device_path, expected_serial="", expected_size=None):
 
 
 def unmount_target(device):
-    failures = []
-    for mountpoint in device.get("mountpoints", []):
-        result = subprocess.run(
-            ["udisksctl", "unmount", "-b", device["path"]],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            failures.append(result.stderr.strip() or result.stdout.strip())
-
-    if failures:
-        raise PreflightError("Could not unmount target: " + "; ".join(failures))
+    """Unmount each mounted partition belonging to the selected disk."""
+    try:
+        return unmount_partitions(device)
+    except UnmountError as exc:
+        raise PreflightError(str(exc)) from exc
 
 
 def ensure_image_fits(image_path, device):
