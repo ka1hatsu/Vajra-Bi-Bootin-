@@ -43,13 +43,14 @@ class ResolvedDownloadDialog(QDialog):
             self.combo.addItem(f"{image.distro} {image.version} | {image.architecture} | {image.filename}")
         if not self.images:
             self.status.setText("No compatible direct ISO was resolved for this distribution and architecture.")
+            self.cancel.setText("Close")
             return
-        self.combo.setEnabled(True); self.download.setEnabled(True)
-        self.status.setText(f"Found {len(self.images)} compatible image(s). Choose one to download.")
+        self.set_workflow_state("ready",f"Found {len(self.images)} compatible image(s). Choose one to download.")
 
     def resolve_failed(self,message):
         self.progress.setRange(0,100)
         self.progress.setValue(0)
+        self.cancel.setText("Close")
         fallback=get_official_fallback(self.distro_id)
         self.status.setText('No compatible direct ISO was resolved automatically. You can use the official download page instead.\n\n'+message)
         if fallback:
@@ -73,6 +74,7 @@ class ResolvedDownloadDialog(QDialog):
 
         busy=state in ("resolving","downloading","verifying","cancelling")
         self.combo.setEnabled(bool(self.images) and not busy)
+        self.cancel.setEnabled(True)
 
         if state=="ready":
             self.download.setText("Download ISO")
@@ -168,6 +170,9 @@ class ResolvedDownloadDialog(QDialog):
             self.download_session.cancelled()
         self.set_workflow_state("cancelled","Cancelled; .part file kept for resume. You can retry.")
 
+    def _active_resolver(self):
+        return self.resolver is not None and self.resolver.isRunning()
+
     def closeEvent(self,event):
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
@@ -175,10 +180,18 @@ class ResolvedDownloadDialog(QDialog):
                 event.ignore()
                 self.set_workflow_state("cancelling","Waiting for the active download to stop safely...")
                 return
+        if self._active_resolver():
+            event.ignore()
+            self.status.setText("Waiting for release lookup to finish before closing...")
+            self.cancel.setEnabled(False)
+            return
         event.accept()
 
     def cancel_or_close(self):
         if self.worker and self.worker.isRunning():
             self.set_workflow_state("cancelling","Cancelling download safely...")
             self.worker.cancel()
+        elif self._active_resolver():
+            self.status.setText("Release lookup is still running. The dialog can close when it finishes.")
+            self.cancel.setEnabled(False)
         else:self.reject()
